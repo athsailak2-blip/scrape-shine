@@ -176,7 +176,7 @@ const PersonCard = ({ person, onCopy }: { person: PersonResult; onCopy: (text: s
         <div>
           <div className="flex items-center gap-2 text-sm font-medium mb-2">
             <Phone className="h-4 w-4 text-primary" />
-            Phones ({person.phones.length}{person.morePhones > 0 ? ` + ${person.morePhones} more on detail page` : ""})
+            Phones ({person.phones.length})
           </div>
           <Table>
             <TableHeader>

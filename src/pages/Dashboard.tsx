@@ -222,6 +222,8 @@ const Dashboard = () => {
   const [showKey, setShowKey] = useState(false);
   const [savingKey, setSavingKey] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isDisabled, setIsDisabled] = useState(false);
 
   const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
   const [bulkRunning, setBulkRunning] = useState(false);

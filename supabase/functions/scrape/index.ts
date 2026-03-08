@@ -6,6 +6,167 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+interface PersonResult {
+  name: string;
+  age: string | null;
+  deceased: boolean;
+  currentAddress: string | null;
+  previousAddresses: string[];
+  moreAddresses: number;
+  aliases: string[];
+  phones: Array<{ number: string; type: string; carrier: string }>;
+  morePhones: number;
+  emails: string[];
+  relatives: string[];
+  associates: string[];
+  detailUrl: string | null;
+}
+
+function parseListingPage(html: string): PersonResult[] {
+  const results: PersonResult[] = [];
+
+  // Split by card-hover divs (each person result)
+  const cardRegex = /<div class="card card-hover"[^>]*>[\s\S]*?<\/div>\s*<\/div>\s*<\/div>\s*<\/div>/g;
+  
+  // Better approach: find each person card by the name heading pattern
+  const personBlocks: string[] = [];
+  const namePattern = /<h2 class="mb-0">\s*<i class="fad fa-user-circle/g;
+  let match;
+  const positions: number[] = [];
+  
+  while ((match = namePattern.exec(html)) !== null) {
+    positions.push(match.index);
+  }
+  
+  for (let i = 0; i < positions.length; i++) {
+    const start = positions[i];
+    const end = i < positions.length - 1 ? positions[i + 1] : html.length;
+    personBlocks.push(html.substring(start, end));
+  }
+
+  for (const block of personBlocks) {
+    const person: PersonResult = {
+      name: "",
+      age: null,
+      deceased: false,
+      currentAddress: null,
+      previousAddresses: [],
+      moreAddresses: 0,
+      aliases: [],
+      phones: [],
+      morePhones: 0,
+      emails: [],
+      relatives: [],
+      associates: [],
+      detailUrl: null,
+    };
+
+    // Name
+    const nameMatch = block.match(/<span class="name-given">\s*([\s\S]*?)\s*<\/span>/);
+    if (nameMatch) person.name = nameMatch[1].trim();
+
+    // Age
+    const ageMatch = block.match(/<span class="age">(\d+)<\/span>/);
+    if (ageMatch) person.age = ageMatch[1];
+
+    // Deceased
+    if (/deceased/i.test(block)) person.deceased = true;
+
+    // Current address
+    const currentAddrMatch = block.match(/<p class="address-current[^"]*"[^>]*>\s*<a[^>]*>([^<]+)<\/a>/);
+    if (currentAddrMatch) person.currentAddress = currentAddrMatch[1].trim();
+
+    // Previous addresses
+    const prevAddrRegex = /<p class="[^"]*address-previous[^"]*"[^>]*>\s*<a[^>]*>([^<]+)<\/a>/g;
+    let addrMatch;
+    while ((addrMatch = prevAddrRegex.exec(block)) !== null) {
+      person.previousAddresses.push(addrMatch[1].trim());
+    }
+
+    // More addresses count
+    const moreAddrMatch = block.match(/\[(\d+)\] more\.\.\./);
+    if (moreAddrMatch) person.moreAddresses = parseInt(moreAddrMatch[1]);
+
+    // Aliases
+    const aliasRegex = /<span class="aka">([^<]+)<\/span>/g;
+    let aliasMatch;
+    while ((aliasMatch = aliasRegex.exec(block)) !== null) {
+      person.aliases.push(aliasMatch[1].trim());
+    }
+
+    // Phones with type and carrier from title attribute
+    // title="Find other people associated with (315) 573-3358 (Wireless - Cellco Partnership dba Verizon Wireless - NY)"
+    const phoneRegex = /<a[^>]*title="[^"]*\((\d{3})\)\s*(\d{3})-(\d{4})\s*\(([^)]+)\)"[^>]*class="phone"[^>]*>\((\d{3})\)\s*(\d{3})-(\d{4})<\/a>/g;
+    let phoneMatch;
+    while ((phoneMatch = phoneRegex.exec(block)) !== null) {
+      const number = `(${phoneMatch[5]}) ${phoneMatch[6]}-${phoneMatch[7]}`;
+      const info = phoneMatch[4]; // e.g. "Wireless - Cellco Partnership dba Verizon Wireless - NY"
+      const parts = info.split(" - ");
+      const type = parts[0]?.trim() || "";
+      const carrier = parts.slice(1, -1).join(" - ").trim() || ""; // exclude state code at end
+      person.phones.push({ number, type, carrier });
+    }
+
+    // More phones count
+    const morePhonesMatch = block.match(/class="more-phones[\s\S]*?\[(\d+)\] more/);
+    if (morePhonesMatch) person.morePhones = parseInt(morePhonesMatch[1]);
+
+    // Emails - regex fallback in the block
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    const siteDomains = new Set(["cyberbackgroundchecks.com", "example.com"]);
+    let emailMatch;
+    while ((emailMatch = emailRegex.exec(block)) !== null) {
+      const email = emailMatch[0].toLowerCase();
+      if (!siteDomains.has(email.split("@")[1]) && !person.emails.includes(email)) {
+        person.emails.push(email);
+      }
+    }
+
+    // Relatives
+    const relativeRegex = /<a[^>]*class="relative"[^>]*>([^<]+)<\/a>/g;
+    let relMatch;
+    while ((relMatch = relativeRegex.exec(block)) !== null) {
+      person.relatives.push(relMatch[1].trim());
+    }
+
+    // Associates
+    const assocRegex = /<a[^>]*class="associate"[^>]*>([^<]+)<\/a>/g;
+    let assocMatch;
+    while ((assocMatch = assocRegex.exec(block)) !== null) {
+      person.associates.push(assocMatch[1].trim());
+    }
+
+    // Detail URL
+    const detailMatch = block.match(/href="(https:\/\/www\.cyberbackgroundchecks\.com\/detail\/[^"]+)"/);
+    if (detailMatch) person.detailUrl = detailMatch[1];
+
+    if (person.name) results.push(person);
+  }
+
+  // Also check for emails in JSON-LD if present
+  const jsonLdMatches = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+  for (const jmatch of jsonLdMatches) {
+    try {
+      const data = JSON.parse(jmatch[1]);
+      const items = Array.isArray(data) ? data : [data];
+      for (const item of items) {
+        if (item.email) {
+          const vals = Array.isArray(item.email) ? item.email : [item.email];
+          // Add to first result if exists
+          if (results.length > 0) {
+            for (const e of vals) {
+              const el = e.toLowerCase();
+              if (!results[0].emails.includes(el)) results[0].emails.push(el);
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return results;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -67,125 +228,23 @@ Deno.serve(async (req) => {
 
     if (response.status !== 200) {
       return new Response(
-        JSON.stringify({ error: `Scrape failed with status ${response.status}`, status: response.status, html }),
+        JSON.stringify({ error: `Scrape failed with status ${response.status}`, status: response.status }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Extract data from JSON-LD
-    const jsonLdMatches = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
-    const emails = new Set<string>();
-    const phones: Array<{ number: string; type?: string; carrier?: string }> = [];
-    let age: string | null = null;
-    let deceased = false;
-    const aliases: string[] = [];
-    const addresses: Array<{ street?: string; city?: string; state?: string; zip?: string }> = [];
+    // Parse the listing page HTML
+    const people = parseListingPage(html);
 
-    for (const match of jsonLdMatches) {
-      try {
-        const data = JSON.parse(match[1]);
-        const items = Array.isArray(data) ? data : [data];
-        for (const item of items) {
-          // Emails
-          if (item.email) {
-            const vals = Array.isArray(item.email) ? item.email : [item.email];
-            vals.forEach((e: string) => emails.add(e.toLowerCase()));
-          }
-          // Contact points
-          if (item.contactPoint) {
-            const contacts = Array.isArray(item.contactPoint) ? item.contactPoint : [item.contactPoint];
-            for (const c of contacts) {
-              if (c.email) {
-                const cEmails = Array.isArray(c.email) ? c.email : [c.email];
-                cEmails.forEach((e: string) => emails.add(e.toLowerCase()));
-              }
-              if (c.telephone) {
-                phones.push({ number: c.telephone, type: c.contactType || undefined });
-              }
-            }
-          }
-          // Telephone directly
-          if (item.telephone) {
-            const tels = Array.isArray(item.telephone) ? item.telephone : [item.telephone];
-            tels.forEach((t: string) => {
-              if (!phones.find(p => p.number === t)) phones.push({ number: t });
-            });
-          }
-          // Age
-          if (item.age) age = String(item.age);
-          if (item.birthDate && !age) {
-            try {
-              const birth = new Date(item.birthDate);
-              const now = new Date();
-              age = String(Math.floor((now.getTime() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000)));
-            } catch {}
-          }
-          // Aliases
-          if (item.alternateName) {
-            const altNames = Array.isArray(item.alternateName) ? item.alternateName : [item.alternateName];
-            altNames.forEach((n: string) => { if (!aliases.includes(n)) aliases.push(n); });
-          }
-          // Addresses
-          if (item.address) {
-            const addrs = Array.isArray(item.address) ? item.address : [item.address];
-            for (const addr of addrs) {
-              addresses.push({
-                street: addr.streetAddress,
-                city: addr.addressLocality,
-                state: addr.addressRegion,
-                zip: addr.postalCode,
-              });
-            }
-          }
-        }
-      } catch {}
-    }
-
-    // Regex fallback for emails
-    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-    const siteDomains = new Set(["cyberbackgroundchecks.com", "example.com"]);
-    for (const match of html.matchAll(emailRegex)) {
-      const email = match[0].toLowerCase();
-      const domain = email.split("@")[1];
-      if (!siteDomains.has(domain)) emails.add(email);
-    }
-
-    // Extract phone type/carrier from HTML (listing page shows first 3)
-    const phoneBlockRegex = /class="[^"]*phone[^"]*"[^>]*>[\s\S]*?<\/div>/gi;
-    const phoneBlocks = html.match(phoneBlockRegex) || [];
-    // Try to extract type info near phone numbers
-    for (const phone of phones) {
-      const cleanNum = phone.number.replace(/\D/g, "");
-      const phoneRegion = html.indexOf(cleanNum.slice(-4));
-      if (phoneRegion > -1) {
-        const context = html.substring(Math.max(0, phoneRegion - 200), phoneRegion + 200);
-        if (/wireless/i.test(context)) phone.type = "Wireless";
-        else if (/landline/i.test(context)) phone.type = "Landline";
-        else if (/voip/i.test(context)) phone.type = "VoIP";
-        const carrierMatch = context.match(/carrier[:\s]*([^<,]+)/i);
-        if (carrierMatch) phone.carrier = carrierMatch[1].trim();
-      }
-    }
-
-    // Check deceased
-    if (/deceased/i.test(html)) deceased = true;
-
-    // Extract age from HTML if not found in JSON-LD
-    if (!age) {
-      const ageMatch = html.match(/(?:age|Age)[:\s]*(\d{1,3})/);
-      if (ageMatch) age = ageMatch[1];
-    }
+    // Count total results from the page
+    const totalMatch = html.match(/<strong>(\d+)<\/strong>\s*results? for/);
+    const totalResults = totalMatch ? parseInt(totalMatch[1]) : people.length;
 
     return new Response(
       JSON.stringify({
         status: response.status,
-        emails: [...emails],
-        phones,
-        age,
-        deceased,
-        aliases,
-        addresses: addresses.slice(0, 10),
-        totalAddresses: addresses.length,
+        totalResults,
+        people,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

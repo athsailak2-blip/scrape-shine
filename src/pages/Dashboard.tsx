@@ -44,37 +44,34 @@ import {
   Mail,
   Phone,
   MapPin,
-  Calendar,
   AlertTriangle,
+  Users,
+  ExternalLink,
 } from "lucide-react";
 
-type PhoneInfo = {
-  number: string;
-  type?: string;
-  carrier?: string;
-};
+type PhoneInfo = { number: string; type: string; carrier: string };
 
-type AddressInfo = {
-  street?: string;
-  city?: string;
-  state?: string;
-  zip?: string;
-};
-
-type PersonData = {
-  emails: string[];
-  phones: PhoneInfo[];
+type PersonResult = {
+  name: string;
   age: string | null;
   deceased: boolean;
+  currentAddress: string | null;
+  previousAddresses: string[];
+  moreAddresses: number;
   aliases: string[];
-  addresses: AddressInfo[];
-  totalAddresses: number;
+  phones: PhoneInfo[];
+  morePhones: number;
+  emails: string[];
+  relatives: string[];
+  associates: string[];
+  detailUrl: string | null;
 };
 
 type ScrapeResult = {
   url: string;
   status: number;
-  data: PersonData;
+  totalResults: number;
+  people: PersonResult[];
   scrapedAt: string;
   person: PersonInput;
 };
@@ -123,6 +120,158 @@ function buildUrl(person: PersonInput): string {
   const city = person.city.trim().toLowerCase().replace(/\s+/g, "-");
   return `https://www.cyberbackgroundchecks.com/people/${first}-${last}/${state}/${city}`;
 }
+
+const PersonCard = ({ person, onCopy }: { person: PersonResult; onCopy: (text: string, label: string) => void }) => (
+  <div className="bg-card border border-border rounded-xl overflow-hidden">
+    <div className="p-4 border-b border-border">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <User className="h-5 w-5 text-primary" />
+          <div>
+            <h3 className="font-semibold font-heading text-lg">{person.name}</h3>
+            <p className="text-xs text-muted-foreground">
+              {person.age && `Age ${person.age}`}
+              {person.deceased && (
+                <span className="text-destructive ml-2 inline-flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" /> Deceased
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+        {person.detailUrl && (
+          <a href={person.detailUrl} target="_blank" rel="noopener noreferrer"
+            className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+            Detail Page <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
+      </div>
+    </div>
+
+    <div className="p-4 space-y-4">
+      {/* Emails */}
+      {person.emails.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Mail className="h-4 w-4 text-primary" /> Emails ({person.emails.length})
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => onCopy(person.emails.join("\n"), "Emails")} className="h-7 text-xs gap-1">
+              <Copy className="h-3 w-3" /> Copy
+            </Button>
+          </div>
+          {person.emails.map((email, i) => (
+            <div key={i} className="font-mono text-sm bg-muted/50 rounded-lg px-3 py-2 mb-1 flex items-center justify-between">
+              <span>{email}</span>
+              <button onClick={() => onCopy(email, "Email")} className="text-muted-foreground hover:text-foreground">
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Phones */}
+      {person.phones.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 text-sm font-medium mb-2">
+            <Phone className="h-4 w-4 text-primary" />
+            Phones ({person.phones.length}{person.morePhones > 0 ? ` + ${person.morePhones} more on detail page` : ""})
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow><TableHead>Number</TableHead><TableHead>Type</TableHead><TableHead>Carrier</TableHead></TableRow>
+            </TableHeader>
+            <TableBody>
+              {person.phones.map((ph, i) => (
+                <TableRow key={i}>
+                  <TableCell className="font-mono">{ph.number}</TableCell>
+                  <TableCell>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      ph.type === "Wireless" ? "bg-primary/10 text-primary" :
+                      ph.type === "Voip" ? "bg-blue-500/10 text-blue-400" :
+                      ph.type === "Landline" ? "bg-orange-500/10 text-orange-400" : "bg-muted text-muted-foreground"
+                    }`}>{ph.type || "—"}</span>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{ph.carrier || "—"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {/* Current Address */}
+      {person.currentAddress && (
+        <div>
+          <div className="flex items-center gap-2 text-sm font-medium mb-2">
+            <MapPin className="h-4 w-4 text-primary" /> Current Address
+          </div>
+          <div className="text-sm bg-muted/50 rounded-lg px-3 py-2">{person.currentAddress}</div>
+        </div>
+      )}
+
+      {/* Previous Addresses */}
+      {person.previousAddresses.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 text-sm font-medium mb-2">
+            <MapPin className="h-4 w-4 text-muted-foreground" />
+            Previous Addresses ({person.previousAddresses.length}{person.moreAddresses > 0 ? ` + ${person.moreAddresses} more` : ""})
+          </div>
+          <div className="space-y-1 max-h-[150px] overflow-y-auto">
+            {person.previousAddresses.map((addr, i) => (
+              <div key={i} className="text-sm text-muted-foreground bg-muted/30 rounded-lg px-3 py-1.5">{addr}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Aliases */}
+      {person.aliases.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 text-sm font-medium mb-2">
+            <User className="h-4 w-4 text-primary" /> Aliases
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {person.aliases.map((a, i) => (
+              <span key={i} className="text-xs bg-muted/50 rounded-full px-3 py-1">{a}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Relatives & Associates */}
+      {(person.relatives.length > 0 || person.associates.length > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {person.relatives.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                <Users className="h-4 w-4 text-primary" /> Relatives ({person.relatives.length})
+              </div>
+              <div className="space-y-1">
+                {person.relatives.map((r, i) => (
+                  <div key={i} className="text-sm text-muted-foreground">{r}</div>
+                ))}
+              </div>
+            </div>
+          )}
+          {person.associates.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                <Users className="h-4 w-4 text-muted-foreground" /> Associates ({person.associates.length})
+              </div>
+              <div className="space-y-1">
+                {person.associates.map((a, i) => (
+                  <div key={i} className="text-sm text-muted-foreground">{a}</div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  </div>
+);
 
 const Dashboard = () => {
   const [firstName, setFirstName] = useState("");
@@ -182,18 +331,16 @@ const Dashboard = () => {
     return {
       url: targetUrl,
       status: data.status || 200,
-      data: {
-        emails: data.emails || [],
-        phones: data.phones || [],
-        age: data.age || null,
-        deceased: data.deceased || false,
-        aliases: data.aliases || [],
-        addresses: data.addresses || [],
-        totalAddresses: data.totalAddresses || 0,
-      },
+      totalResults: data.totalResults || 0,
+      people: data.people || [],
       scrapedAt: new Date().toISOString(),
       person,
     };
+  };
+
+  const handleCopy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: `${label} copied` });
   };
 
   const handleScrape = async (e: React.FormEvent) => {
@@ -212,7 +359,8 @@ const Dashboard = () => {
       const scrapeResult = await scrapeUrl(url, person);
       setResult(scrapeResult);
       setHistory((prev) => [scrapeResult, ...prev].slice(0, 20));
-      toast({ title: "Search complete", description: `Found ${scrapeResult.data.emails.length} email(s) for ${firstName} ${lastName}` });
+      const totalEmails = scrapeResult.people.reduce((sum, p) => sum + p.emails.length, 0);
+      toast({ title: "Search complete", description: `Found ${scrapeResult.totalResults} result(s), ${totalEmails} email(s)` });
     } catch (error: any) {
       toast({ title: "Search failed", description: error.message, variant: "destructive" });
     } finally { setLoading(false); }
@@ -228,13 +376,13 @@ const Dashboard = () => {
       if (lines.length < 2) { toast({ title: "Invalid CSV", variant: "destructive" }); return; }
       const headerCols = lines[0].split(",").map((c) => c.trim().toLowerCase().replace(/^["']|["']$/g, ""));
       const findCol = (names: string[]) => headerCols.findIndex((h) => names.some((n) => h.includes(n)));
-      const firstIdx = findCol(["first", "firstname", "first_name", "first name"]);
-      const lastIdx = findCol(["last", "lastname", "last_name", "last name"]);
+      const firstIdx = findCol(["first", "firstname", "first_name"]);
+      const lastIdx = findCol(["last", "lastname", "last_name"]);
       const cityIdx = findCol(["city"]);
       const stateIdx = findCol(["state"]);
       const zipIdx = findCol(["zip", "zipcode", "zip_code", "postal"]);
       if (firstIdx === -1 || lastIdx === -1 || cityIdx === -1 || stateIdx === -1) {
-        toast({ title: "Missing columns", description: "CSV must have: first name, last name, city, state.", variant: "destructive" }); return;
+        toast({ title: "Missing columns", description: "Need: first name, last name, city, state.", variant: "destructive" }); return;
       }
       const items: BulkItem[] = [];
       for (let i = 1; i < lines.length; i++) {
@@ -249,7 +397,7 @@ const Dashboard = () => {
         }
       }
       if (items.length === 0) { toast({ title: "No valid rows", variant: "destructive" }); return; }
-      if (items.length > 500) { toast({ title: "Max 500 people per batch", variant: "destructive" }); return; }
+      if (items.length > 500) { toast({ title: "Max 500 per batch", variant: "destructive" }); return; }
       setBulkItems(items);
       toast({ title: `${items.length} people loaded` });
     };
@@ -262,7 +410,6 @@ const Dashboard = () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { toast({ title: "Not authenticated", variant: "destructive" }); return; }
     setBulkRunning(true); abortRef.current = false;
-
     for (let i = 0; i < bulkItems.length; i++) {
       if (abortRef.current) break;
       if (bulkItems[i].status === "done") continue;
@@ -271,7 +418,6 @@ const Dashboard = () => {
         const result = await scrapeUrl(bulkItems[i].url, bulkItems[i].person);
         setBulkItems((prev) => prev.map((item, idx) => (idx === i ? { ...item, status: "done", result } : item)));
         setHistory((prev) => [result, ...prev].slice(0, 50));
-        // Delay between requests to avoid bans
         if (i < bulkItems.length - 1) await new Promise(r => setTimeout(r, 3000));
       } catch (error: any) {
         setBulkItems((prev) => prev.map((item, idx) => idx === i ? { ...item, status: "error", error: error.message } : item));
@@ -281,24 +427,26 @@ const Dashboard = () => {
     toast({ title: "Bulk search complete" });
   };
 
-  const stopBulkScrape = () => { abortRef.current = true; };
-  const clearBulk = () => { setBulkItems([]); };
-
   const exportBulkResults = () => {
     const completed = bulkItems.filter((i) => i.status === "done" && i.result);
-    if (completed.length === 0) { toast({ title: "No results to export", variant: "destructive" }); return; }
-    const csvRows = ["first_name,last_name,city,state,zipcode,age,deceased,emails,phones,aliases"];
+    if (completed.length === 0) { toast({ title: "No results", variant: "destructive" }); return; }
+    const csvRows = ["search_first,search_last,search_city,search_state,result_name,age,deceased,emails,phones,phone_types,carriers,current_address,aliases,relatives"];
     for (const item of completed) {
       const p = item.person;
-      const d = item.result!.data;
-      const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
-      csvRows.push([
-        esc(p.firstName), esc(p.lastName), esc(p.city), esc(p.state), esc(p.zipcode),
-        esc(d.age || ""), esc(d.deceased ? "Yes" : "No"),
-        esc(d.emails.join("; ")),
-        esc(d.phones.map(ph => `${ph.number}${ph.type ? ` (${ph.type})` : ""}`).join("; ")),
-        esc(d.aliases.join("; ")),
-      ].join(","));
+      for (const r of item.result!.people) {
+        const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+        csvRows.push([
+          esc(p.firstName), esc(p.lastName), esc(p.city), esc(p.state),
+          esc(r.name), esc(r.age || ""), esc(r.deceased ? "Yes" : "No"),
+          esc(r.emails.join("; ")),
+          esc(r.phones.map(ph => ph.number).join("; ")),
+          esc(r.phones.map(ph => ph.type).join("; ")),
+          esc(r.phones.map(ph => ph.carrier).join("; ")),
+          esc(r.currentAddress || ""),
+          esc(r.aliases.join("; ")),
+          esc(r.relatives.join("; ")),
+        ].join(","));
+      }
     }
     const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
     const a = document.createElement("a");
@@ -310,13 +458,6 @@ const Dashboard = () => {
 
   const handleLogout = async () => { await supabase.auth.signOut(); window.location.href = "/auth"; };
 
-  const copyEmails = () => {
-    if (result) {
-      navigator.clipboard.writeText(result.data.emails.join("\n"));
-      toast({ title: "Emails copied" });
-    }
-  };
-
   const maskedKey = apiKey ? `${apiKey.slice(0, 6)}${"•".repeat(Math.max(0, apiKey.length - 10))}${apiKey.slice(-4)}` : "";
   const bulkDone = bulkItems.filter((i) => i.status === "done").length;
   const bulkError = bulkItems.filter((i) => i.status === "error").length;
@@ -325,7 +466,6 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container flex items-center justify-between h-14 px-4">
           <div className="flex items-center gap-2">
@@ -336,8 +476,7 @@ const Dashboard = () => {
             <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
               <DialogTrigger asChild>
                 <Button variant="ghost" size="sm" className="gap-1.5">
-                  <Settings className="h-4 w-4" />
-                  <span className="hidden sm:inline">Settings</span>
+                  <Settings className="h-4 w-4" /><span className="hidden sm:inline">Settings</span>
                 </Button>
               </DialogTrigger>
               <DialogContent>
@@ -355,7 +494,7 @@ const Dashboard = () => {
                       placeholder="Enter your scrape.do API key" type={showKey ? "text" : "password"}
                       className="pl-10 pr-10 font-mono text-sm" />
                     <button type="button" onClick={() => setShowKey(!showKey)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                       {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
@@ -371,14 +510,13 @@ const Dashboard = () => {
       </header>
 
       <main className="container px-4 py-8 max-w-5xl">
-        {/* API Key Banner */}
         {!apiKey && (
           <div className="mb-6 bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Key className="h-5 w-5 text-primary" />
               <div>
                 <p className="text-sm font-medium">API key required</p>
-                <p className="text-xs text-muted-foreground">Add your scrape.do API key to start. Uses 10 credits per search.</p>
+                <p className="text-xs text-muted-foreground">Add your scrape.do API key. 10 credits per search.</p>
               </div>
             </div>
             <Button variant="hero" size="sm" onClick={() => setSettingsOpen(true)}>Add Key</Button>
@@ -395,11 +533,11 @@ const Dashboard = () => {
 
         <div className="mb-8">
           <h1 className="text-3xl font-bold font-heading mb-2">People Search</h1>
-          <p className="text-muted-foreground mb-6">Find emails, phone numbers, and more from public records.</p>
+          <p className="text-muted-foreground mb-6">Find emails, phones, addresses, relatives and more from public records.</p>
 
           <Tabs defaultValue="single" className="w-full">
             <TabsList className="mb-4">
-              <TabsTrigger value="single" className="gap-2"><User className="h-4 w-4" />Single Lookup</TabsTrigger>
+              <TabsTrigger value="single" className="gap-2"><User className="h-4 w-4" />Single</TabsTrigger>
               <TabsTrigger value="bulk" className="gap-2"><FileSpreadsheet className="h-4 w-4" />Bulk CSV</TabsTrigger>
             </TabsList>
 
@@ -420,7 +558,7 @@ const Dashboard = () => {
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block">State</label>
-                    <Input value={state} onChange={(e) => setState(e.target.value)} placeholder="NY or New York" required />
+                    <Input value={state} onChange={(e) => setState(e.target.value)} placeholder="NY" required />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Zipcode (optional)</label>
@@ -448,16 +586,13 @@ const Dashboard = () => {
                     <div className="bg-muted/30 border border-border rounded-lg p-3 text-xs text-muted-foreground space-y-1">
                       <p className="font-medium text-foreground text-sm">CSV Format</p>
                       <p>Required: <span className="font-mono text-primary">first_name</span>, <span className="font-mono text-primary">last_name</span>, <span className="font-mono text-primary">city</span>, <span className="font-mono text-primary">state</span></p>
-                      <p>Optional: <span className="font-mono text-primary">zipcode</span></p>
-                      <p className="mt-1">Cost: 10 credits per person</p>
+                      <p>Optional: <span className="font-mono text-primary">zipcode</span> • 10 credits per person</p>
                     </div>
                     <label htmlFor="csv-upload"
                       className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-border rounded-xl p-10 cursor-pointer hover:border-primary/40 transition-colors">
                       <Upload className="h-8 w-8 text-muted-foreground" />
-                      <div className="text-center">
-                        <p className="text-sm font-medium">Upload CSV file</p>
-                        <p className="text-xs text-muted-foreground mt-1">Max 500 people per batch.</p>
-                      </div>
+                      <p className="text-sm font-medium">Upload CSV file</p>
+                      <p className="text-xs text-muted-foreground">Max 500 per batch</p>
                       <input id="csv-upload" ref={fileInputRef} type="file" accept=".csv,.txt" onChange={handleCsvUpload} className="hidden" />
                     </label>
                   </>
@@ -471,10 +606,10 @@ const Dashboard = () => {
                           <Button variant="hero" onClick={runBulkScrape} className="gap-2">
                             <Globe className="h-4 w-4" />Search {bulkTotal} People
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={clearBulk}><X className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" onClick={() => setBulkItems([])}><X className="h-4 w-4" /></Button>
                         </div>
                       ) : (
-                        <Button variant="destructive" onClick={stopBulkScrape} className="gap-2">
+                        <Button variant="destructive" onClick={() => { abortRef.current = true; }} className="gap-2">
                           <X className="h-4 w-4" />Stop
                         </Button>
                       )}
@@ -498,7 +633,7 @@ const Dashboard = () => {
 
                     <div className="bg-card border border-border rounded-xl overflow-hidden max-h-[400px] overflow-y-auto">
                       {bulkItems.map((item, i) => (
-                        <div key={i} className="flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors">
+                        <div key={i} className="flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-b-0 hover:bg-muted/30">
                           {item.status === "pending" && <span className="h-4 w-4 rounded-full border border-border flex-shrink-0" />}
                           {item.status === "scraping" && <Loader2 className="h-4 w-4 text-primary animate-spin flex-shrink-0" />}
                           {item.status === "done" && <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" />}
@@ -508,13 +643,11 @@ const Dashboard = () => {
                           </span>
                           {item.status === "done" && item.result && (
                             <div className="flex items-center gap-2 flex-shrink-0">
-                              <span className="text-xs text-muted-foreground">{item.result.data.emails.length} emails</span>
+                              <span className="text-xs text-muted-foreground">{item.result.people.length} results</span>
                               <button onClick={() => setResult(item.result!)} className="text-xs text-primary hover:underline">View</button>
                             </div>
                           )}
-                          {item.status === "error" && (
-                            <span className="text-xs text-destructive truncate max-w-[200px] flex-shrink-0">{item.error}</span>
-                          )}
+                          {item.status === "error" && <span className="text-xs text-destructive truncate max-w-[200px]">{item.error}</span>}
                         </div>
                       ))}
                     </div>
@@ -525,130 +658,25 @@ const Dashboard = () => {
           </Tabs>
         </div>
 
-        {/* Result Card */}
+        {/* Results */}
         {result && (
           <div className="mb-8 space-y-4">
-            <div className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between p-4 border-b border-border">
-                <div className="flex items-center gap-3">
-                  <User className="h-5 w-5 text-primary" />
-                  <div>
-                    <h3 className="font-semibold font-heading">
-                      {result.person.firstName} {result.person.lastName}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      {result.person.city}, {result.person.state.toUpperCase()}
-                      {result.data.age && ` • Age ${result.data.age}`}
-                      {result.data.deceased && (
-                        <span className="text-destructive ml-2 inline-flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3" /> Deceased
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-mono font-medium">
-                  {result.status}
-                </span>
-              </div>
-
-              <div className="p-4 space-y-5">
-                {/* Emails */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <Mail className="h-4 w-4 text-primary" />
-                      Emails ({result.data.emails.length})
-                    </div>
-                    {result.data.emails.length > 0 && (
-                      <Button variant="ghost" size="sm" onClick={copyEmails} className="h-7 text-xs gap-1">
-                        <Copy className="h-3 w-3" /> Copy All
-                      </Button>
-                    )}
-                  </div>
-                  {result.data.emails.length > 0 ? (
-                    <div className="space-y-1">
-                      {result.data.emails.map((email, i) => (
-                        <div key={i} className="font-mono text-sm bg-muted/50 rounded-lg px-3 py-2 flex items-center justify-between">
-                          <span>{email}</span>
-                          <button onClick={() => { navigator.clipboard.writeText(email); toast({ title: "Copied" }); }}
-                            className="text-muted-foreground hover:text-foreground transition-colors">
-                            <Copy className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No emails found</p>
-                  )}
-                </div>
-
-                {/* Phones */}
-                {result.data.phones.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 text-sm font-medium mb-2">
-                      <Phone className="h-4 w-4 text-primary" />
-                      Phone Numbers ({result.data.phones.length})
-                    </div>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Number</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Carrier</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {result.data.phones.map((phone, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="font-mono">{phone.number}</TableCell>
-                            <TableCell>{phone.type || "—"}</TableCell>
-                            <TableCell>{phone.carrier || "—"}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-
-                {/* Aliases */}
-                {result.data.aliases.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 text-sm font-medium mb-2">
-                      <User className="h-4 w-4 text-primary" />
-                      Aliases
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {result.data.aliases.map((alias, i) => (
-                        <span key={i} className="text-xs bg-muted/50 rounded-full px-3 py-1">{alias}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Addresses */}
-                {result.data.addresses.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 text-sm font-medium mb-2">
-                      <MapPin className="h-4 w-4 text-primary" />
-                      Addresses ({result.data.totalAddresses})
-                    </div>
-                    <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                      {result.data.addresses.map((addr, i) => (
-                        <div key={i} className="text-sm text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
-                          {[addr.street, addr.city, addr.state, addr.zip].filter(Boolean).join(", ")}
-                        </div>
-                      ))}
-                      {result.data.totalAddresses > result.data.addresses.length && (
-                        <p className="text-xs text-muted-foreground px-3">
-                          + {result.data.totalAddresses - result.data.addresses.length} more addresses
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold font-heading">
+                {result.totalResults} result{result.totalResults !== 1 ? "s" : ""} for {result.person.firstName} {result.person.lastName}
+              </h2>
+              <span className="text-xs text-muted-foreground">{result.person.city}, {result.person.state.toUpperCase()}</span>
             </div>
+
+            {result.people.length === 0 && (
+              <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
+                No results found. The page may have returned empty or the person wasn't found.
+              </div>
+            )}
+
+            {result.people.map((person, i) => (
+              <PersonCard key={i} person={person} onCopy={handleCopy} />
+            ))}
           </div>
         )}
 
@@ -661,10 +689,8 @@ const Dashboard = () => {
                 <button key={i} onClick={() => setResult(item)}
                   className="w-full text-left bg-card border border-border rounded-lg p-3 hover:border-primary/30 transition-colors flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="text-sm truncate max-w-sm">
-                      {item.person.firstName} {item.person.lastName} — {item.person.city}, {item.person.state.toUpperCase()}
-                    </span>
-                    <span className="text-xs text-primary">{item.data.emails.length} emails</span>
+                    <span className="text-sm">{item.person.firstName} {item.person.lastName} — {item.person.city}, {item.person.state.toUpperCase()}</span>
+                    <span className="text-xs text-primary">{item.totalResults} results</span>
                   </div>
                   <span className="text-xs text-muted-foreground">{new Date(item.scrapedAt).toLocaleTimeString()}</span>
                 </button>

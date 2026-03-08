@@ -360,10 +360,12 @@ const Dashboard = () => {
       
       // Filter by zipcode if provided
       if (person.zipcode.trim()) {
-        const zip = person.zipcode.trim();
+        const zip = person.zipcode.trim().substring(0, 5); // Use first 5 digits only
         scrapeResult.people = scrapeResult.people.filter((p) => {
-          const allAddresses = [p.currentAddress || "", ...p.previousAddresses].join(" ");
-          return allAddresses.includes(zip);
+          // Check current address and all previous addresses for zip match
+          const currentAddr = p.currentAddress || "";
+          const prevAddrs = p.previousAddresses.join(" ");
+          return currentAddr.includes(zip) || prevAddrs.includes(zip);
         });
         scrapeResult.totalResults = scrapeResult.people.length;
       }

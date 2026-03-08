@@ -207,6 +207,7 @@ const Dashboard = () => {
         state: item.person.state,
         zipcode: item.person.zipcode || "",
         status: "pending" as const,
+        original_row: item.originalRow || {},
       }));
 
       const { error: insertError } = await supabase.from("bulk_job_items").insert(itemInserts);

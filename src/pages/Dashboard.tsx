@@ -339,26 +339,42 @@ const Dashboard = () => {
       return;
     }
 
-    const csvRows = ["search_first,search_last,search_city,search_state,search_zipcode,status,result_name,age,deceased,current_address,emails,phones,relatives"];
     const esc = (s: string) => `"${(s || "").replace(/"/g, '""')}"`;
 
+    // Collect all original_row keys to preserve uploaded columns
+    const originalKeys = new Set<string>();
+    items.forEach((item: any) => {
+      if (item.original_row && typeof item.original_row === "object") {
+        Object.keys(item.original_row).forEach(k => originalKeys.add(k));
+      }
+    });
+    const origCols = Array.from(originalKeys);
+
+    const resultCols = ["status", "result_name", "age", "deceased", "current_address", "emails", "phones", "relatives"];
+    const allCols = [...origCols, ...resultCols];
+    const csvRows = [allCols.map(esc).join(",")];
+
     for (const item of items) {
+      const orig = (item.original_row && typeof item.original_row === "object") ? item.original_row as Record<string, any> : {};
       const res = item.result as any;
+
       if (item.status === "done" && res?.people?.length > 0) {
         for (const r of res.people) {
-          csvRows.push([
-            esc(item.first_name), esc(item.last_name), esc(item.city), esc(item.state), esc(item.zipcode || ""),
+          const origVals = origCols.map(k => esc(String(orig[k] ?? "")));
+          const resultVals = [
             esc("success"), esc(r.name), esc(r.age || ""), esc(r.deceased ? "Yes" : "No"),
             esc(r.currentAddress || ""), esc((r.emails || []).join("; ")),
             esc((r.phones || []).map((p: any) => p.number).join("; ")),
             esc((r.relatives || []).join("; ")),
-          ].join(","));
+          ];
+          csvRows.push([...origVals, ...resultVals].join(","));
         }
       } else {
-        csvRows.push([
-          esc(item.first_name), esc(item.last_name), esc(item.city), esc(item.state), esc(item.zipcode || ""),
-          esc(item.status), "", "", "", "", "", "", "",
-        ].join(","));
+        const origVals = origCols.map(k => esc(String(orig[k] ?? "")));
+        const statusLabel = item.error?.includes("credit") ? "credits_exhausted" :
+          item.status === "error" ? "failed" : item.status;
+        const resultVals = [esc(statusLabel), "", "", "", "", "", "", ""];
+        csvRows.push([...origVals, ...resultVals].join(","));
       }
     }
 

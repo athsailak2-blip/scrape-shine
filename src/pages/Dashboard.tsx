@@ -439,7 +439,7 @@ const Dashboard = () => {
   const exportBulkResults = () => {
     const completed = bulkItems.filter((i) => i.status === "done" && i.result);
     if (completed.length === 0) { toast({ title: "No results", variant: "destructive" }); return; }
-    const csvRows = ["search_first,search_last,search_city,search_state,result_name,age,deceased,emails,phones,phone_types,carriers,current_address,aliases,relatives"];
+    const csvRows = ["search_first,search_last,search_city,search_state,result_name,age,deceased,emails,phones,phone_types,carriers"];
     for (const item of completed) {
       const p = item.person;
       for (const r of item.result!.people) {
@@ -451,9 +451,6 @@ const Dashboard = () => {
           esc(r.phones.map(ph => ph.number).join("; ")),
           esc(r.phones.map(ph => ph.type).join("; ")),
           esc(r.phones.map(ph => ph.carrier).join("; ")),
-          esc(r.currentAddress || ""),
-          esc(r.aliases.join("; ")),
-          esc(r.relatives.join("; ")),
         ].join(","));
       }
     }

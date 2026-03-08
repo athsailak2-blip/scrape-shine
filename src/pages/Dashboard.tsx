@@ -28,7 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Globe,
+  Search,
   Loader2,
   Copy,
   Settings,
@@ -47,6 +47,7 @@ import {
   AlertTriangle,
   ExternalLink,
   Clock,
+  ShieldCheck,
 } from "lucide-react";
 
 type PhoneInfo = { number: string; type: string; carrier: string };

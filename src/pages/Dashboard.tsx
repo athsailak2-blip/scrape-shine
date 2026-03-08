@@ -583,7 +583,7 @@ const Dashboard = () => {
                 )}
 
                 <Button type="submit" variant="hero" disabled={loading} className="w-full sm:w-auto">
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Globe className="h-4 w-4 mr-2" />}
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
                   Search Person
                 </Button>
               </form>

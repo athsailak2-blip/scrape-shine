@@ -614,7 +614,7 @@ const Dashboard = () => {
                       {!bulkRunning ? (
                         <div className="flex gap-2">
                           <Button variant="hero" onClick={runBulkScrape} className="gap-2">
-                            <Globe className="h-4 w-4" />Search {bulkTotal} People
+                            <Search className="h-4 w-4" />Search {bulkTotal} People
                           </Button>
                           <Button variant="ghost" size="icon" onClick={() => setBulkItems([])}><X className="h-4 w-4" /></Button>
                         </div>

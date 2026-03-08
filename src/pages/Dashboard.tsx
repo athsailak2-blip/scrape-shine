@@ -176,7 +176,7 @@ const PersonCard = ({ person, onCopy }: { person: PersonResult; onCopy: (text: s
         <div>
           <div className="flex items-center gap-2 text-sm font-medium mb-2">
             <Phone className="h-4 w-4 text-primary" />
-            Phones ({person.phones.length}{person.morePhones > 0 ? ` + ${person.morePhones} more on detail page` : ""})
+            Phones ({person.phones.length})
           </div>
           <Table>
             <TableHeader>
@@ -201,74 +201,6 @@ const PersonCard = ({ person, onCopy }: { person: PersonResult; onCopy: (text: s
         </div>
       )}
 
-      {/* Current Address */}
-      {person.currentAddress && (
-        <div>
-          <div className="flex items-center gap-2 text-sm font-medium mb-2">
-            <MapPin className="h-4 w-4 text-primary" /> Current Address
-          </div>
-          <div className="text-sm bg-muted/50 rounded-lg px-3 py-2">{person.currentAddress}</div>
-        </div>
-      )}
-
-      {/* Previous Addresses */}
-      {person.previousAddresses.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 text-sm font-medium mb-2">
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-            Previous Addresses ({person.previousAddresses.length}{person.moreAddresses > 0 ? ` + ${person.moreAddresses} more` : ""})
-          </div>
-          <div className="space-y-1 max-h-[150px] overflow-y-auto">
-            {person.previousAddresses.map((addr, i) => (
-              <div key={i} className="text-sm text-muted-foreground bg-muted/30 rounded-lg px-3 py-1.5">{addr}</div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Aliases */}
-      {person.aliases.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 text-sm font-medium mb-2">
-            <User className="h-4 w-4 text-primary" /> Aliases
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {person.aliases.map((a, i) => (
-              <span key={i} className="text-xs bg-muted/50 rounded-full px-3 py-1">{a}</span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Relatives & Associates */}
-      {(person.relatives.length > 0 || person.associates.length > 0) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {person.relatives.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 text-sm font-medium mb-2">
-                <Users className="h-4 w-4 text-primary" /> Relatives ({person.relatives.length})
-              </div>
-              <div className="space-y-1">
-                {person.relatives.map((r, i) => (
-                  <div key={i} className="text-sm text-muted-foreground">{r}</div>
-                ))}
-              </div>
-            </div>
-          )}
-          {person.associates.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 text-sm font-medium mb-2">
-                <Users className="h-4 w-4 text-muted-foreground" /> Associates ({person.associates.length})
-              </div>
-              <div className="space-y-1">
-                {person.associates.map((a, i) => (
-                  <div key={i} className="text-sm text-muted-foreground">{a}</div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   </div>
 );

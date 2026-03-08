@@ -335,6 +335,18 @@ const Dashboard = () => {
     toast({ title: `${label} copied` });
   };
 
+  const filterByZip = (scrapeResult: ScrapeResult, zip: string) => {
+    if (!zip) return;
+    const z = zip.trim().substring(0, 5);
+    if (!z) return;
+    scrapeResult.people = scrapeResult.people.filter((p) => {
+      const currentAddr = p.currentAddress || "";
+      const prevAddrs = p.previousAddresses.join(" ");
+      return currentAddr.includes(z) || prevAddrs.includes(z);
+    });
+    scrapeResult.totalResults = scrapeResult.people.length;
+  };
+
   const handleScrape = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName || !lastName || !city || !state) {
@@ -349,29 +361,11 @@ const Dashboard = () => {
     try {
       await supabase.auth.getSession();
       const scrapeResult = await scrapeUrl(url, person);
-      
-      // Filter by zipcode if provided
-      if (person.zipcode.trim()) {
-        const zip = person.zipcode.trim().substring(0, 5);
-        console.log("Filtering by zip:", zip);
-        console.log("People before filter:", scrapeResult.people.map(p => ({
-          name: p.name,
-          currentAddress: p.currentAddress,
-          previousAddresses: p.previousAddresses,
-        })));
-        scrapeResult.people = scrapeResult.people.filter((p) => {
-          const currentAddr = p.currentAddress || "";
-          const prevAddrs = p.previousAddresses.join(" ");
-          const matches = currentAddr.includes(zip) || prevAddrs.includes(zip);
-          console.log(`  ${p.name}: current="${currentAddr}", matches=${matches}`);
-          return matches;
-        });
-        scrapeResult.totalResults = scrapeResult.people.length;
-        console.log("People after filter:", scrapeResult.people.length);
-      }
+      filterByZip(scrapeResult, person.zipcode);
       
       setResult(scrapeResult);
       setHistory((prev) => [scrapeResult, ...prev].slice(0, 20));
+      await saveResultToDb(scrapeResult);
       const totalEmails = scrapeResult.people.reduce((sum, p) => sum + p.emails.length, 0);
       toast({ title: "Search complete", description: `Found ${scrapeResult.totalResults} result(s), ${totalEmails} email(s)` });
     } catch (error: any) {

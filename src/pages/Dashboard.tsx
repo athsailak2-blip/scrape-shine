@@ -570,6 +570,11 @@ const Dashboard = () => {
                 </div>
               </DialogContent>
             </Dialog>
+            {isAdmin && (
+              <Button variant="ghost" size="sm" onClick={() => navigate("/admin")} className="gap-1.5">
+                <ShieldCheck className="h-4 w-4" /><span className="hidden sm:inline">Admin</span>
+              </Button>
+            )}
             <Button variant="ghost" size="sm" onClick={handleLogout}>Sign out</Button>
           </div>
         </div>

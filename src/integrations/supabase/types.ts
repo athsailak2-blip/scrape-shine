@@ -14,6 +14,95 @@ export type Database = {
   }
   public: {
     Tables: {
+      bulk_job_items: {
+        Row: {
+          city: string
+          created_at: string
+          error: string | null
+          first_name: string
+          id: string
+          job_id: string
+          last_name: string
+          original_row: Json | null
+          result: Json | null
+          state: string
+          status: string
+          updated_at: string
+          zipcode: string | null
+        }
+        Insert: {
+          city: string
+          created_at?: string
+          error?: string | null
+          first_name: string
+          id?: string
+          job_id: string
+          last_name: string
+          original_row?: Json | null
+          result?: Json | null
+          state: string
+          status?: string
+          updated_at?: string
+          zipcode?: string | null
+        }
+        Update: {
+          city?: string
+          created_at?: string
+          error?: string | null
+          first_name?: string
+          id?: string
+          job_id?: string
+          last_name?: string
+          original_row?: Json | null
+          result?: Json | null
+          state?: string
+          status?: string
+          updated_at?: string
+          zipcode?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bulk_job_items_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "bulk_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bulk_jobs: {
+        Row: {
+          completed_items: number
+          created_at: string
+          failed_items: number
+          id: string
+          status: string
+          total_items: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_items?: number
+          created_at?: string
+          failed_items?: number
+          id?: string
+          status?: string
+          total_items?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_items?: number
+          created_at?: string
+          failed_items?: number
+          id?: string
+          status?: string
+          total_items?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string

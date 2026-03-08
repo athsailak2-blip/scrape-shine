@@ -43,10 +43,9 @@ import {
   User,
   Mail,
   Phone,
-  MapPin,
   AlertTriangle,
-  Users,
   ExternalLink,
+  Clock,
 } from "lucide-react";
 
 type PhoneInfo = { number: string; type: string; carrier: string };
@@ -223,16 +222,76 @@ const Dashboard = () => {
 
   const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
   const [bulkRunning, setBulkRunning] = useState(false);
+  const [dbHistory, setDbHistory] = useState<ScrapeResult[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef(false);
 
   const { toast } = useToast();
 
-  useEffect(() => { loadApiKey(); }, []);
+  useEffect(() => { loadApiKey(); loadHistory(); }, []);
 
   const loadApiKey = async () => {
     const { data } = await supabase.from("user_api_keys").select("api_key").maybeSingle();
     if (data?.api_key) { setApiKey(data.api_key); setApiKeyInput(data.api_key); }
+  };
+
+  const loadHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const { data, error } = await supabase
+        .from("search_results")
+        .select("*")
+        .gte("created_at", sevenDaysAgo.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      if (data) {
+        const mapped: ScrapeResult[] = data.map((row: any) => ({
+          url: row.search_url,
+          status: 200,
+          totalResults: row.total_results,
+          people: row.people as PersonResult[],
+          scrapedAt: row.created_at,
+          person: {
+            firstName: row.search_first,
+            lastName: row.search_last,
+            city: row.search_city,
+            state: row.search_state,
+            zipcode: row.search_zipcode || "",
+          },
+        }));
+        setDbHistory(mapped);
+        setHistory(mapped.slice(0, 20));
+      }
+    } catch (err) {
+      console.error("Failed to load history:", err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const saveResultToDb = async (scrapeResult: ScrapeResult) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      await supabase.from("search_results").insert({
+        user_id: user.id,
+        search_first: scrapeResult.person.firstName,
+        search_last: scrapeResult.person.lastName,
+        search_city: scrapeResult.person.city,
+        search_state: scrapeResult.person.state,
+        search_zipcode: scrapeResult.person.zipcode || "",
+        search_url: scrapeResult.url,
+        total_results: scrapeResult.totalResults,
+        people: scrapeResult.people as any,
+        source: "single",
+      });
+    } catch (err) {
+      console.error("Failed to save result:", err);
+    }
   };
 
   const saveApiKey = async () => {
@@ -275,6 +334,18 @@ const Dashboard = () => {
     toast({ title: `${label} copied` });
   };
 
+  const filterByZip = (scrapeResult: ScrapeResult, zip: string) => {
+    if (!zip) return;
+    const z = zip.trim().substring(0, 5);
+    if (!z) return;
+    scrapeResult.people = scrapeResult.people.filter((p) => {
+      const currentAddr = p.currentAddress || "";
+      const prevAddrs = p.previousAddresses.join(" ");
+      return currentAddr.includes(z) || prevAddrs.includes(z);
+    });
+    scrapeResult.totalResults = scrapeResult.people.length;
+  };
+
   const handleScrape = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName || !lastName || !city || !state) {
@@ -289,29 +360,11 @@ const Dashboard = () => {
     try {
       await supabase.auth.getSession();
       const scrapeResult = await scrapeUrl(url, person);
-      
-      // Filter by zipcode if provided
-      if (person.zipcode.trim()) {
-        const zip = person.zipcode.trim().substring(0, 5);
-        console.log("Filtering by zip:", zip);
-        console.log("People before filter:", scrapeResult.people.map(p => ({
-          name: p.name,
-          currentAddress: p.currentAddress,
-          previousAddresses: p.previousAddresses,
-        })));
-        scrapeResult.people = scrapeResult.people.filter((p) => {
-          const currentAddr = p.currentAddress || "";
-          const prevAddrs = p.previousAddresses.join(" ");
-          const matches = currentAddr.includes(zip) || prevAddrs.includes(zip);
-          console.log(`  ${p.name}: current="${currentAddr}", matches=${matches}`);
-          return matches;
-        });
-        scrapeResult.totalResults = scrapeResult.people.length;
-        console.log("People after filter:", scrapeResult.people.length);
-      }
+      filterByZip(scrapeResult, person.zipcode);
       
       setResult(scrapeResult);
       setHistory((prev) => [scrapeResult, ...prev].slice(0, 20));
+      await saveResultToDb(scrapeResult);
       const totalEmails = scrapeResult.people.reduce((sum, p) => sum + p.emails.length, 0);
       toast({ title: "Search complete", description: `Found ${scrapeResult.totalResults} result(s), ${totalEmails} email(s)` });
     } catch (error: any) {
@@ -369,6 +422,8 @@ const Dashboard = () => {
       setBulkItems((prev) => prev.map((item, idx) => (idx === i ? { ...item, status: "scraping" } : item)));
       try {
         const result = await scrapeUrl(bulkItems[i].url, bulkItems[i].person);
+        filterByZip(result, bulkItems[i].person.zipcode);
+        await saveResultToDb({ ...result, person: bulkItems[i].person });
         setBulkItems((prev) => prev.map((item, idx) => (idx === i ? { ...item, status: "done", result } : item)));
         setHistory((prev) => [result, ...prev].slice(0, 50));
         if (i < bulkItems.length - 1) await new Promise(r => setTimeout(r, 3000));
@@ -383,7 +438,7 @@ const Dashboard = () => {
   const exportBulkResults = () => {
     const completed = bulkItems.filter((i) => i.status === "done" && i.result);
     if (completed.length === 0) { toast({ title: "No results", variant: "destructive" }); return; }
-    const csvRows = ["search_first,search_last,search_city,search_state,result_name,age,deceased,emails,phones,phone_types,carriers,current_address,aliases,relatives"];
+    const csvRows = ["search_first,search_last,search_city,search_state,result_name,age,deceased,emails,phones,phone_types,carriers"];
     for (const item of completed) {
       const p = item.person;
       for (const r of item.result!.people) {
@@ -395,9 +450,6 @@ const Dashboard = () => {
           esc(r.phones.map(ph => ph.number).join("; ")),
           esc(r.phones.map(ph => ph.type).join("; ")),
           esc(r.phones.map(ph => ph.carrier).join("; ")),
-          esc(r.currentAddress || ""),
-          esc(r.aliases.join("; ")),
-          esc(r.relatives.join("; ")),
         ].join(","));
       }
     }
@@ -636,7 +688,10 @@ const Dashboard = () => {
         {/* History */}
         {history.length > 0 && (
           <div>
-            <h2 className="text-lg font-semibold font-heading mb-4">Recent Searches</h2>
+            <div className="flex items-center gap-2 mb-4">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-lg font-semibold font-heading">Recent Searches (Last 7 Days)</h2>
+            </div>
             <div className="space-y-2">
               {history.map((item, i) => (
                 <button key={i} onClick={() => setResult(item)}
@@ -645,7 +700,7 @@ const Dashboard = () => {
                     <span className="text-sm">{item.person.firstName} {item.person.lastName} — {item.person.city}, {item.person.state.toUpperCase()}</span>
                     <span className="text-xs text-primary">{item.totalResults} results</span>
                   </div>
-                  <span className="text-xs text-muted-foreground">{new Date(item.scrapedAt).toLocaleTimeString()}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(item.scrapedAt).toLocaleDateString()} {new Date(item.scrapedAt).toLocaleTimeString()}</span>
                 </button>
               ))}
             </div>

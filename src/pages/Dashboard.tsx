@@ -369,12 +369,40 @@ const Dashboard = () => {
     scrapeResult.totalResults = scrapeResult.people.length;
   };
 
+  const checkCache = async (person: PersonInput): Promise<ScrapeResult | null> => {
+    const twentyFourHoursAgo = new Date();
+    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+    const { data } = await supabase
+      .from("search_results")
+      .select("*")
+      .eq("search_first", person.firstName.trim())
+      .eq("search_last", person.lastName.trim())
+      .eq("search_city", person.city.trim())
+      .eq("search_state", normalizeState(person.state))
+      .gte("created_at", twentyFourHoursAgo.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (data) {
+      return {
+        url: data.search_url,
+        status: 200,
+        totalResults: data.total_results,
+        people: data.people as PersonResult[],
+        scrapedAt: data.created_at,
+        person,
+      };
+    }
+    return null;
+  };
+
   const handleScrape = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName || !lastName || !city || !state) {
       toast({ title: "All fields required", variant: "destructive" }); return;
     }
     if (!apiKey) { setSettingsOpen(true); toast({ title: "API key required", variant: "destructive" }); return; }
+    if (isDisabled) { toast({ title: "Account disabled", description: "Contact admin.", variant: "destructive" }); return; }
 
     const person: PersonInput = { firstName, lastName, city, state, zipcode };
     const url = buildUrl(person);
@@ -382,6 +410,16 @@ const Dashboard = () => {
 
     try {
       await supabase.auth.getSession();
+
+      // Check 24h cache first
+      const cached = await checkCache(person);
+      if (cached) {
+        setResult(cached);
+        toast({ title: "Cached result", description: "Showing result from last 24 hours." });
+        setLoading(false);
+        return;
+      }
+
       const scrapeResult = await scrapeUrl(url, person);
       filterByZip(scrapeResult, person.zipcode);
       

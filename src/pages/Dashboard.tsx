@@ -43,10 +43,9 @@ import {
   User,
   Mail,
   Phone,
-  MapPin,
   AlertTriangle,
-  Users,
   ExternalLink,
+  Clock,
 } from "lucide-react";
 
 type PhoneInfo = { number: string; type: string; carrier: string };

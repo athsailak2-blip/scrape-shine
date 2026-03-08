@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { url, format = "text" } = await req.json();
+    const { url, format = "text", apiKey } = await req.json();
 
     if (!url) {
       return new Response(JSON.stringify({ error: "URL is required" }), {
@@ -45,12 +45,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    const SCRAPE_DO_TOKEN = Deno.env.get("SCRAPE_DO_API_TOKEN");
-    if (!SCRAPE_DO_TOKEN) {
+    if (!apiKey) {
       return new Response(
-        JSON.stringify({ error: "SCRAPE_DO_API_TOKEN not configured" }),
+        JSON.stringify({ error: "API key is required. Please add your scrape.do API key in Settings." }),
         {
-          status: 500,
+          status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
@@ -58,7 +57,7 @@ Deno.serve(async (req) => {
 
     // Build scrape.do API URL
     const params = new URLSearchParams({
-      token: SCRAPE_DO_TOKEN,
+      token: apiKey,
       url: url,
     });
 

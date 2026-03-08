@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Globe, Search, Loader2, Copy, ExternalLink } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Globe, Search, Loader2, Copy, ExternalLink, Settings, Key, Eye, EyeOff } from "lucide-react";
 
 type ScrapeResult = {
   url: string;
@@ -25,11 +33,64 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ScrapeResult | null>(null);
   const [history, setHistory] = useState<ScrapeResult[]>([]);
+  const [apiKey, setApiKey] = useState("");
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [savingKey, setSavingKey] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    loadApiKey();
+  }, []);
+
+  const loadApiKey = async () => {
+    const { data } = await supabase
+      .from("user_api_keys")
+      .select("api_key")
+      .maybeSingle();
+    if (data?.api_key) {
+      setApiKey(data.api_key);
+      setApiKeyInput(data.api_key);
+    }
+  };
+
+  const saveApiKey = async () => {
+    if (!apiKeyInput.trim()) {
+      toast({ title: "API key is required", variant: "destructive" });
+      return;
+    }
+    setSavingKey(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { error } = await supabase
+        .from("user_api_keys")
+        .upsert(
+          { user_id: user.id, api_key: apiKeyInput.trim(), updated_at: new Date().toISOString() },
+          { onConflict: "user_id" }
+        );
+      if (error) throw error;
+      setApiKey(apiKeyInput.trim());
+      setSettingsOpen(false);
+      toast({ title: "API key saved" });
+    } catch (error: any) {
+      toast({ title: "Failed to save API key", description: error.message, variant: "destructive" });
+    } finally {
+      setSavingKey(false);
+    }
+  };
 
   const handleScrape = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) return;
+
+    if (!apiKey) {
+      setSettingsOpen(true);
+      toast({ title: "API key required", description: "Please add your scrape.do API key first.", variant: "destructive" });
+      return;
+    }
 
     setLoading(true);
     setResult(null);
@@ -39,7 +100,7 @@ const Dashboard = () => {
       if (!session) throw new Error("Not authenticated");
 
       const { data, error } = await supabase.functions.invoke("scrape", {
-        body: { url, format },
+        body: { url, format, apiKey },
       });
 
       if (error) throw error;
@@ -73,6 +134,8 @@ const Dashboard = () => {
     }
   };
 
+  const maskedKey = apiKey ? `${apiKey.slice(0, 6)}${"•".repeat(Math.max(0, apiKey.length - 10))}${apiKey.slice(-4)}` : "";
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -82,13 +145,79 @@ const Dashboard = () => {
             <Globe className="h-5 w-5 text-primary" />
             <span className="font-bold font-heading">ScrapeLab</span>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleLogout}>
-            Sign out
-          </Button>
+          <div className="flex items-center gap-2">
+            <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="gap-1.5">
+                  <Settings className="h-4 w-4" />
+                  <span className="hidden sm:inline">Settings</span>
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle className="font-heading">API Key Settings</DialogTitle>
+                  <DialogDescription>
+                    Enter your scrape.do API key. Get one at{" "}
+                    <a href="https://scrape.do" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                      scrape.do
+                    </a>
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
+                  <div className="relative">
+                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      value={apiKeyInput}
+                      onChange={(e) => setApiKeyInput(e.target.value)}
+                      placeholder="Enter your scrape.do API key"
+                      type={showKey ? "text" : "password"}
+                      className="pl-10 pr-10 font-mono text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKey(!showKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <Button onClick={saveApiKey} disabled={savingKey} className="w-full" variant="hero">
+                    {savingKey ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save API Key"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
+              Sign out
+            </Button>
+          </div>
         </div>
       </header>
 
       <main className="container px-4 py-8 max-w-5xl">
+        {/* API Key Banner */}
+        {!apiKey && (
+          <div className="mb-6 bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Key className="h-5 w-5 text-primary" />
+              <div>
+                <p className="text-sm font-medium">API key required</p>
+                <p className="text-xs text-muted-foreground">Add your scrape.do API key to start scraping.</p>
+              </div>
+            </div>
+            <Button variant="hero" size="sm" onClick={() => setSettingsOpen(true)}>
+              Add Key
+            </Button>
+          </div>
+        )}
+
+        {apiKey && (
+          <div className="mb-6 flex items-center gap-2 text-xs text-muted-foreground">
+            <Key className="h-3.5 w-3.5" />
+            <span className="font-mono">{maskedKey}</span>
+          </div>
+        )}
+
         {/* Scrape Form */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold font-heading mb-2">Web Scraper</h1>

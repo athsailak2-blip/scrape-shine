@@ -40,6 +40,7 @@ const BulkUpload = ({ bulkItems, setBulkItems, bulkRunning, onRunBulk, onStopBul
     setRawRows([]);
     setMapping({ firstName: -1, lastName: -1, city: -1, state: -1, zipcode: -1 });
     setParsedPeople([]);
+    setOriginalRows([]);
     setBulkItems([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };

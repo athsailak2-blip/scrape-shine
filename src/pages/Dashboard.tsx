@@ -357,6 +357,17 @@ const Dashboard = () => {
     try {
       await supabase.auth.getSession();
       const scrapeResult = await scrapeUrl(url, person);
+      
+      // Filter by zipcode if provided
+      if (person.zipcode.trim()) {
+        const zip = person.zipcode.trim();
+        scrapeResult.people = scrapeResult.people.filter((p) => {
+          const allAddresses = [p.currentAddress || "", ...p.previousAddresses].join(" ");
+          return allAddresses.includes(zip);
+        });
+        scrapeResult.totalResults = scrapeResult.people.length;
+      }
+      
       setResult(scrapeResult);
       setHistory((prev) => [scrapeResult, ...prev].slice(0, 20));
       const totalEmails = scrapeResult.people.reduce((sum, p) => sum + p.emails.length, 0);

@@ -103,7 +103,11 @@ function parseListingPage(html: string): PersonResult[] {
       const info = phoneMatch[4]; // e.g. "Wireless - Cellco Partnership dba Verizon Wireless - NY"
       const parts = info.split(" - ");
       const type = parts[0]?.trim() || "";
-      const carrier = parts.slice(1, -1).join(" - ").trim() || ""; // exclude state code at end
+      // Last part may be a 2-letter state code — strip it if so
+      const lastPart = parts[parts.length - 1]?.trim() || "";
+      const hasStateCode = /^[A-Z]{2}$/.test(lastPart);
+      const carrierParts = hasStateCode ? parts.slice(1, -1) : parts.slice(1);
+      const carrier = carrierParts.join(" - ").trim() || "";
       person.phones.push({ number, type, carrier });
     }
 

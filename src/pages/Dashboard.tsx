@@ -423,6 +423,8 @@ const Dashboard = () => {
       setBulkItems((prev) => prev.map((item, idx) => (idx === i ? { ...item, status: "scraping" } : item)));
       try {
         const result = await scrapeUrl(bulkItems[i].url, bulkItems[i].person);
+        filterByZip(result, bulkItems[i].person.zipcode);
+        await saveResultToDb({ ...result, person: bulkItems[i].person });
         setBulkItems((prev) => prev.map((item, idx) => (idx === i ? { ...item, status: "done", result } : item)));
         setHistory((prev) => [result, ...prev].slice(0, 50));
         if (i < bulkItems.length - 1) await new Promise(r => setTimeout(r, 3000));

@@ -295,18 +295,28 @@ const Dashboard = () => {
   };
 
   const exportBulkResults = () => {
-    const csvRows = ["search_first,search_last,search_city,search_state,search_zipcode,status,result_name,age,deceased,current_address,emails,phones,phone_types,carriers,relatives"];
+    const esc = (s: string) => `"${(s || "").replace(/"/g, '""')}"`;
+
+    // Collect all original row keys
+    const originalKeys = new Set<string>();
+    bulkItems.forEach(item => {
+      if (item.originalRow) Object.keys(item.originalRow).forEach(k => originalKeys.add(k));
+    });
+    const origCols = Array.from(originalKeys);
+
+    const resultCols = ["status", "result_name", "age", "deceased", "current_address", "emails", "phones", "phone_types", "carriers", "relatives"];
+    const allCols = [...origCols, ...resultCols];
+    const csvRows = [allCols.map(esc).join(",")];
+
     for (const item of bulkItems) {
-      const p = item.person;
-      const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+      const orig = item.originalRow || {};
       if (item.status === "done" && item.result && item.result.people.length > 0) {
         for (const r of item.result.people) {
+          const origVals = origCols.map(k => esc(String(orig[k] ?? "")));
           csvRows.push([
-            esc(p.firstName), esc(p.lastName), esc(p.city), esc(p.state), esc(p.zipcode),
-            esc("success"),
-            esc(r.name), esc(r.age || ""), esc(r.deceased ? "Yes" : "No"),
-            esc(r.currentAddress || ""),
-            esc(r.emails.join("; ")),
+            ...origVals,
+            esc("success"), esc(r.name), esc(r.age || ""), esc(r.deceased ? "Yes" : "No"),
+            esc(r.currentAddress || ""), esc(r.emails.join("; ")),
             esc(r.phones.map(ph => ph.number).join("; ")),
             esc(r.phones.map(ph => ph.type).join("; ")),
             esc(r.phones.map(ph => ph.carrier).join("; ")),
@@ -314,13 +324,11 @@ const Dashboard = () => {
           ].join(","));
         }
       } else {
+        const origVals = origCols.map(k => esc(String(orig[k] ?? "")));
         const status = item.error?.includes("credit") ? "credits_exhausted" :
           item.error?.includes("Not processed") ? "not_processed" :
           item.status === "error" ? "failed" : "not_processed";
-        csvRows.push([
-          esc(p.firstName), esc(p.lastName), esc(p.city), esc(p.state), esc(p.zipcode),
-          esc(status), "", "", "", "", "", "", "", "", "",
-        ].join(","));
+        csvRows.push([...origVals, esc(status), "", "", "", "", "", "", "", "", ""].join(","));
       }
     }
     const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });

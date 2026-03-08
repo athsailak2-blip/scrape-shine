@@ -479,8 +479,8 @@ const Dashboard = () => {
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container flex items-center justify-between h-14 px-4">
           <div className="flex items-center gap-2">
-            <Globe className="h-5 w-5 text-primary" />
-            <span className="font-bold font-heading">ScrapeLab</span>
+            <Search className="h-5 w-5 text-primary" />
+            <span className="font-bold font-heading">OwnerTrace</span>
           </div>
           <div className="flex items-center gap-2">
             <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>

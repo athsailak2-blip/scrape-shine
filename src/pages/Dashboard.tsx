@@ -207,6 +207,7 @@ const PersonCard = ({ person, onCopy }: { person: PersonResult; onCopy: (text: s
 );
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [city, setCity] = useState("");

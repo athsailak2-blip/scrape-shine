@@ -30,6 +30,7 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
 const JobsDashboard = ({ onExportJob }: JobsDashboardProps) => {
   const [jobs, setJobs] = useState<BulkJob[]>([]);
   const [loading, setLoading] = useState(true);
+  const prevStatusRef = useRef<Record<string, string>>({});
 
   const loadJobs = async () => {
     setLoading(true);
@@ -45,16 +46,43 @@ const JobsDashboard = ({ onExportJob }: JobsDashboardProps) => {
   useEffect(() => {
     loadJobs();
 
-    // Subscribe to realtime updates
     const channel = supabase
       .channel("bulk-jobs-updates")
-      .on("postgres_changes", { event: "*", schema: "public", table: "bulk_jobs" }, () => {
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "bulk_jobs" }, (payload) => {
+        const updated = payload.new as BulkJob;
+        const prevStatus = prevStatusRef.current[updated.id];
+
+        // Notify on status transition to complete or failed
+        if (updated.status === "complete" && prevStatus !== "complete") {
+          toast({
+            title: "✅ Bulk job complete",
+            description: `${updated.completed_items} of ${updated.total_items} people processed successfully.`,
+          });
+        } else if (updated.status === "failed" && prevStatus !== "failed") {
+          toast({
+            title: "❌ Bulk job failed",
+            description: `${updated.failed_items} failures out of ${updated.total_items} people.`,
+            variant: "destructive",
+          });
+        }
+
+        prevStatusRef.current[updated.id] = updated.status;
+        loadJobs();
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "bulk_jobs" }, () => {
         loadJobs();
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // Seed the status ref on initial load
+  useEffect(() => {
+    const map: Record<string, string> = {};
+    jobs.forEach(j => { map[j.id] = j.status; });
+    prevStatusRef.current = map;
+  }, [jobs]);
 
   if (loading) {
     return (

@@ -32,6 +32,7 @@ const BulkUpload = ({ bulkItems, setBulkItems, bulkRunning, onRunBulk, onStopBul
   const [rawRows, setRawRows] = useState<string[][]>([]);
   const [mapping, setMapping] = useState<ColumnMapping>({ firstName: -1, lastName: -1, city: -1, state: -1, zipcode: -1 });
   const [parsedPeople, setParsedPeople] = useState<PersonInput[]>([]);
+  const [originalRows, setOriginalRows] = useState<Record<string, string>[]>([]);
 
   const resetUpload = () => {
     setStep("upload");

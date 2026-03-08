@@ -237,6 +237,64 @@ const Dashboard = () => {
     if (data?.api_key) { setApiKey(data.api_key); setApiKeyInput(data.api_key); }
   };
 
+  const loadHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const { data, error } = await supabase
+        .from("search_results")
+        .select("*")
+        .gte("created_at", sevenDaysAgo.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      if (data) {
+        const mapped: ScrapeResult[] = data.map((row: any) => ({
+          url: row.search_url,
+          status: 200,
+          totalResults: row.total_results,
+          people: row.people as PersonResult[],
+          scrapedAt: row.created_at,
+          person: {
+            firstName: row.search_first,
+            lastName: row.search_last,
+            city: row.search_city,
+            state: row.search_state,
+            zipcode: row.search_zipcode || "",
+          },
+        }));
+        setDbHistory(mapped);
+        setHistory(mapped.slice(0, 20));
+      }
+    } catch (err) {
+      console.error("Failed to load history:", err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const saveResultToDb = async (scrapeResult: ScrapeResult) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      await supabase.from("search_results").insert({
+        user_id: user.id,
+        search_first: scrapeResult.person.firstName,
+        search_last: scrapeResult.person.lastName,
+        search_city: scrapeResult.person.city,
+        search_state: scrapeResult.person.state,
+        search_zipcode: scrapeResult.person.zipcode || "",
+        search_url: scrapeResult.url,
+        total_results: scrapeResult.totalResults,
+        people: scrapeResult.people as any,
+        source: "single",
+      });
+    } catch (err) {
+      console.error("Failed to save result:", err);
+    }
+  };
+
   const saveApiKey = async () => {
     if (!apiKeyInput.trim()) { toast({ title: "API key is required", variant: "destructive" }); return; }
     setSavingKey(true);

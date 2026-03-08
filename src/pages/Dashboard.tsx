@@ -207,6 +207,7 @@ const Dashboard = () => {
         state: item.person.state,
         zipcode: item.person.zipcode || "",
         status: "pending" as const,
+        original_row: item.originalRow || {},
       }));
 
       const { error: insertError } = await supabase.from("bulk_job_items").insert(itemInserts);
@@ -294,18 +295,28 @@ const Dashboard = () => {
   };
 
   const exportBulkResults = () => {
-    const csvRows = ["search_first,search_last,search_city,search_state,search_zipcode,status,result_name,age,deceased,current_address,emails,phones,phone_types,carriers,relatives"];
+    const esc = (s: string) => `"${(s || "").replace(/"/g, '""')}"`;
+
+    // Collect all original row keys
+    const originalKeys = new Set<string>();
+    bulkItems.forEach(item => {
+      if (item.originalRow) Object.keys(item.originalRow).forEach(k => originalKeys.add(k));
+    });
+    const origCols = Array.from(originalKeys);
+
+    const resultCols = ["status", "result_name", "age", "deceased", "current_address", "emails", "phones", "phone_types", "carriers", "relatives"];
+    const allCols = [...origCols, ...resultCols];
+    const csvRows = [allCols.map(esc).join(",")];
+
     for (const item of bulkItems) {
-      const p = item.person;
-      const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+      const orig = item.originalRow || {};
       if (item.status === "done" && item.result && item.result.people.length > 0) {
         for (const r of item.result.people) {
+          const origVals = origCols.map(k => esc(String(orig[k] ?? "")));
           csvRows.push([
-            esc(p.firstName), esc(p.lastName), esc(p.city), esc(p.state), esc(p.zipcode),
-            esc("success"),
-            esc(r.name), esc(r.age || ""), esc(r.deceased ? "Yes" : "No"),
-            esc(r.currentAddress || ""),
-            esc(r.emails.join("; ")),
+            ...origVals,
+            esc("success"), esc(r.name), esc(r.age || ""), esc(r.deceased ? "Yes" : "No"),
+            esc(r.currentAddress || ""), esc(r.emails.join("; ")),
             esc(r.phones.map(ph => ph.number).join("; ")),
             esc(r.phones.map(ph => ph.type).join("; ")),
             esc(r.phones.map(ph => ph.carrier).join("; ")),
@@ -313,13 +324,11 @@ const Dashboard = () => {
           ].join(","));
         }
       } else {
+        const origVals = origCols.map(k => esc(String(orig[k] ?? "")));
         const status = item.error?.includes("credit") ? "credits_exhausted" :
           item.error?.includes("Not processed") ? "not_processed" :
           item.status === "error" ? "failed" : "not_processed";
-        csvRows.push([
-          esc(p.firstName), esc(p.lastName), esc(p.city), esc(p.state), esc(p.zipcode),
-          esc(status), "", "", "", "", "", "", "", "", "",
-        ].join(","));
+        csvRows.push([...origVals, esc(status), "", "", "", "", "", "", "", "", ""].join(","));
       }
     }
     const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
@@ -339,26 +348,42 @@ const Dashboard = () => {
       return;
     }
 
-    const csvRows = ["search_first,search_last,search_city,search_state,search_zipcode,status,result_name,age,deceased,current_address,emails,phones,relatives"];
     const esc = (s: string) => `"${(s || "").replace(/"/g, '""')}"`;
 
+    // Collect all original_row keys to preserve uploaded columns
+    const originalKeys = new Set<string>();
+    items.forEach((item: any) => {
+      if (item.original_row && typeof item.original_row === "object") {
+        Object.keys(item.original_row).forEach(k => originalKeys.add(k));
+      }
+    });
+    const origCols = Array.from(originalKeys);
+
+    const resultCols = ["status", "result_name", "age", "deceased", "current_address", "emails", "phones", "relatives"];
+    const allCols = [...origCols, ...resultCols];
+    const csvRows = [allCols.map(esc).join(",")];
+
     for (const item of items) {
+      const orig = (item.original_row && typeof item.original_row === "object") ? item.original_row as Record<string, any> : {};
       const res = item.result as any;
+
       if (item.status === "done" && res?.people?.length > 0) {
         for (const r of res.people) {
-          csvRows.push([
-            esc(item.first_name), esc(item.last_name), esc(item.city), esc(item.state), esc(item.zipcode || ""),
+          const origVals = origCols.map(k => esc(String(orig[k] ?? "")));
+          const resultVals = [
             esc("success"), esc(r.name), esc(r.age || ""), esc(r.deceased ? "Yes" : "No"),
             esc(r.currentAddress || ""), esc((r.emails || []).join("; ")),
             esc((r.phones || []).map((p: any) => p.number).join("; ")),
             esc((r.relatives || []).join("; ")),
-          ].join(","));
+          ];
+          csvRows.push([...origVals, ...resultVals].join(","));
         }
       } else {
-        csvRows.push([
-          esc(item.first_name), esc(item.last_name), esc(item.city), esc(item.state), esc(item.zipcode || ""),
-          esc(item.status), "", "", "", "", "", "", "",
-        ].join(","));
+        const origVals = origCols.map(k => esc(String(orig[k] ?? "")));
+        const statusLabel = item.error?.includes("credit") ? "credits_exhausted" :
+          item.status === "error" ? "failed" : item.status;
+        const resultVals = [esc(statusLabel), "", "", "", "", "", "", ""];
+        csvRows.push([...origVals, ...resultVals].join(","));
       }
     }
 

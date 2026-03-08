@@ -32,6 +32,7 @@ const BulkUpload = ({ bulkItems, setBulkItems, bulkRunning, onRunBulk, onStopBul
   const [rawRows, setRawRows] = useState<string[][]>([]);
   const [mapping, setMapping] = useState<ColumnMapping>({ firstName: -1, lastName: -1, city: -1, state: -1, zipcode: -1 });
   const [parsedPeople, setParsedPeople] = useState<PersonInput[]>([]);
+  const [originalRows, setOriginalRows] = useState<Record<string, string>[]>([]);
 
   const resetUpload = () => {
     setStep("upload");
@@ -39,6 +40,7 @@ const BulkUpload = ({ bulkItems, setBulkItems, bulkRunning, onRunBulk, onStopBul
     setRawRows([]);
     setMapping({ firstName: -1, lastName: -1, city: -1, state: -1, zipcode: -1 });
     setParsedPeople([]);
+    setOriginalRows([]);
     setBulkItems([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -109,6 +111,7 @@ const BulkUpload = ({ bulkItems, setBulkItems, bulkRunning, onRunBulk, onStopBul
 
   const handleMappingConfirm = () => {
     const people: PersonInput[] = [];
+    const origRows: Record<string, string>[] = [];
     for (const row of rawRows) {
       const person: PersonInput = {
         firstName: mapping.firstName >= 0 ? (row[mapping.firstName] || "") : "",
@@ -117,18 +120,24 @@ const BulkUpload = ({ bulkItems, setBulkItems, bulkRunning, onRunBulk, onStopBul
         state: mapping.state >= 0 ? (row[mapping.state] || "") : "",
         zipcode: mapping.zipcode >= 0 ? (row[mapping.zipcode] || "") : "",
       };
+      // Build original row object with all headers
+      const orig: Record<string, string> = {};
+      rawHeaders.forEach((h, idx) => { orig[h] = row[idx] || ""; });
       people.push(person);
+      origRows.push(orig);
     }
     setParsedPeople(people);
+    setOriginalRows(origRows);
     setStep("preview");
   };
 
   const handlePreviewConfirm = (validPeople: PersonInput[]) => {
     if (validPeople.length === 0) { toast({ title: "No valid rows", variant: "destructive" }); return; }
-    const items: BulkItem[] = validPeople.map(person => ({
+    const items: BulkItem[] = validPeople.map((person, i) => ({
       person,
       url: buildUrl(person),
       status: "pending" as const,
+      originalRow: originalRows[i],
     }));
     setBulkItems(items);
     setStep("ready");

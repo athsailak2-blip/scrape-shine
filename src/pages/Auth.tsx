@@ -46,8 +46,8 @@ const Auth = () => {
       <div className="w-full max-w-md mx-4 relative z-10">
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 mb-4">
-            <Globe className="h-8 w-8 text-primary" />
-            <span className="text-2xl font-bold font-heading">ScrapeLab</span>
+            <Search className="h-8 w-8 text-primary" />
+            <span className="text-2xl font-bold font-heading">OwnerTrace</span>
           </div>
           <p className="text-muted-foreground">
             {isLogin ? "Welcome back" : "Create your account"}

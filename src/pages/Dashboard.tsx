@@ -2,297 +2,78 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Progress } from "@/components/ui/progress";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Search,
-  Loader2,
-  Copy,
-  Settings,
-  Key,
-  Eye,
-  EyeOff,
-  Upload,
-  FileSpreadsheet,
-  X,
-  CheckCircle2,
-  XCircle,
-  Download,
-  User,
-  Mail,
-  Phone,
-  AlertTriangle,
-  ExternalLink,
-  Clock,
-  ShieldCheck,
-} from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Search, Key, User, FileSpreadsheet, ShieldCheck } from "lucide-react";
 
-type PhoneInfo = { number: string; type: string; carrier: string };
-
-type PersonResult = {
-  name: string;
-  age: string | null;
-  deceased: boolean;
-  currentAddress: string | null;
-  previousAddresses: string[];
-  moreAddresses: number;
-  aliases: string[];
-  phones: PhoneInfo[];
-  morePhones: number;
-  emails: string[];
-  relatives: string[];
-  associates: string[];
-  detailUrl: string | null;
-};
-
-type ScrapeResult = {
-  url: string;
-  status: number;
-  totalResults: number;
-  people: PersonResult[];
-  scrapedAt: string;
-  person: PersonInput;
-};
-
-type PersonInput = {
-  firstName: string;
-  lastName: string;
-  city: string;
-  state: string;
-  zipcode: string;
-};
-
-type BulkItem = {
-  person: PersonInput;
-  url: string;
-  status: "pending" | "scraping" | "done" | "error";
-  result?: ScrapeResult;
-  error?: string;
-};
-
-const US_STATES: Record<string, string> = {
-  alabama: "al", alaska: "ak", arizona: "az", arkansas: "ar", california: "ca",
-  colorado: "co", connecticut: "ct", delaware: "de", florida: "fl", georgia: "ga",
-  hawaii: "hi", idaho: "id", illinois: "il", indiana: "in", iowa: "ia",
-  kansas: "ks", kentucky: "ky", louisiana: "la", maine: "me", maryland: "md",
-  massachusetts: "ma", michigan: "mi", minnesota: "mn", mississippi: "ms", missouri: "mo",
-  montana: "mt", nebraska: "ne", nevada: "nv", "new hampshire": "nh", "new jersey": "nj",
-  "new mexico": "nm", "new york": "ny", "north carolina": "nc", "north dakota": "nd",
-  ohio: "oh", oklahoma: "ok", oregon: "or", pennsylvania: "pa", "rhode island": "ri",
-  "south carolina": "sc", "south dakota": "sd", tennessee: "tn", texas: "tx", utah: "ut",
-  vermont: "vt", virginia: "va", washington: "wa", "west virginia": "wv", wisconsin: "wi",
-  wyoming: "wy",
-};
-
-function normalizeState(input: string): string {
-  const lower = input.trim().toLowerCase();
-  if (lower.length === 2 && Object.values(US_STATES).includes(lower)) return lower;
-  if (US_STATES[lower]) return US_STATES[lower];
-  return lower;
-}
-
-function buildUrl(person: PersonInput): string {
-  const first = person.firstName.trim().toLowerCase();
-  const last = person.lastName.trim().toLowerCase();
-  const state = normalizeState(person.state);
-  const city = person.city.trim().toLowerCase().replace(/\s+/g, "-");
-  return `https://www.cyberbackgroundchecks.com/people/${first}-${last}/${state}/${city}`;
-}
-
-const PersonCard = ({ person, onCopy }: { person: PersonResult; onCopy: (text: string, label: string) => void }) => (
-  <div className="bg-card border border-border rounded-xl overflow-hidden">
-    <div className="p-4 border-b border-border">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <User className="h-5 w-5 text-primary" />
-          <div>
-            <h3 className="font-semibold font-heading text-lg">{person.name}</h3>
-            <p className="text-xs text-muted-foreground">
-              {person.age && `Age ${person.age}`}
-              {person.deceased && (
-                <span className="text-destructive ml-2 inline-flex items-center gap-1">
-                  <AlertTriangle className="h-3 w-3" /> Deceased
-                </span>
-              )}
-            </p>
-          </div>
-        </div>
-        {person.detailUrl && (
-          <a href={person.detailUrl} target="_blank" rel="noopener noreferrer"
-            className="text-xs text-primary hover:underline inline-flex items-center gap-1">
-            Detail Page <ExternalLink className="h-3 w-3" />
-          </a>
-        )}
-      </div>
-    </div>
-
-    <div className="p-4 space-y-4">
-      {/* Emails */}
-      {person.emails.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Mail className="h-4 w-4 text-primary" /> Emails ({person.emails.length})
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => onCopy(person.emails.join("\n"), "Emails")} className="h-7 text-xs gap-1">
-              <Copy className="h-3 w-3" /> Copy
-            </Button>
-          </div>
-          {person.emails.map((email, i) => (
-            <div key={i} className="font-mono text-sm bg-muted/50 rounded-lg px-3 py-2 mb-1 flex items-center justify-between">
-              <span>{email}</span>
-              <button onClick={() => onCopy(email, "Email")} className="text-muted-foreground hover:text-foreground">
-                <Copy className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Phones */}
-      {person.phones.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 text-sm font-medium mb-2">
-            <Phone className="h-4 w-4 text-primary" />
-            Phones ({person.phones.length})
-          </div>
-          <Table>
-            <TableHeader>
-              <TableRow><TableHead>Number</TableHead><TableHead>Type</TableHead><TableHead>Carrier</TableHead></TableRow>
-            </TableHeader>
-            <TableBody>
-              {person.phones.map((ph, i) => (
-                <TableRow key={i}>
-                  <TableCell className="font-mono">{ph.number}</TableCell>
-                  <TableCell>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      ph.type === "Wireless" ? "bg-primary/10 text-primary" :
-                      ph.type === "Voip" ? "bg-blue-500/10 text-blue-400" :
-                      ph.type === "Landline" ? "bg-orange-500/10 text-orange-400" : "bg-muted text-muted-foreground"
-                    }`}>{ph.type || "—"}</span>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{ph.carrier || "—"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-
-    </div>
-  </div>
-);
+import type { PersonInput, PersonResult, ScrapeResult, BulkItem } from "@/components/dashboard/types";
+import { buildUrl, normalizeState, filterByZip } from "@/components/dashboard/utils";
+import PersonCard from "@/components/dashboard/PersonCard";
+import SettingsDialog from "@/components/dashboard/SettingsDialog";
+import SearchForm from "@/components/dashboard/SearchForm";
+import BulkUpload from "@/components/dashboard/BulkUpload";
+import SearchHistory from "@/components/dashboard/SearchHistory";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
-  const [zipcode, setZipcode] = useState("");
+  const { toast } = useToast();
 
+  const [apiKey, setApiKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ScrapeResult | null>(null);
   const [history, setHistory] = useState<ScrapeResult[]>([]);
-  const [apiKey, setApiKey] = useState("");
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  const [showKey, setShowKey] = useState(false);
-  const [savingKey, setSavingKey] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isDisabled, setIsDisabled] = useState(false);
 
   const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
   const [bulkRunning, setBulkRunning] = useState(false);
-  const [dbHistory, setDbHistory] = useState<ScrapeResult[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef(false);
 
-  const { toast } = useToast();
-
-  useEffect(() => { loadApiKey(); loadHistory(); checkRole(); }, []);
+  useEffect(() => {
+    loadApiKey();
+    loadHistory();
+    checkRole();
+  }, []);
 
   const checkRole = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     const { data: roleData } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("role", "admin")
-      .maybeSingle();
+      .from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle();
     if (roleData) setIsAdmin(true);
     const { data: profileData } = await supabase
-      .from("profiles")
-      .select("disabled")
-      .eq("id", user.id)
-      .maybeSingle();
+      .from("profiles").select("disabled").eq("id", user.id).maybeSingle();
     if (profileData?.disabled) setIsDisabled(true);
   };
 
   const loadApiKey = async () => {
     const { data } = await supabase.from("user_api_keys").select("api_key").maybeSingle();
-    if (data?.api_key) { setApiKey(data.api_key); setApiKeyInput(data.api_key); }
+    if (data?.api_key) setApiKey(data.api_key);
   };
 
   const loadHistory = async () => {
-    setLoadingHistory(true);
     try {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       const { data, error } = await supabase
-        .from("search_results")
-        .select("*")
+        .from("search_results").select("*")
         .gte("created_at", sevenDaysAgo.toISOString())
-        .order("created_at", { ascending: false })
-        .limit(100);
+        .order("created_at", { ascending: false }).limit(100);
       if (error) throw error;
       if (data) {
         const mapped: ScrapeResult[] = data.map((row: any) => ({
-          url: row.search_url,
-          status: 200,
-          totalResults: row.total_results,
-          people: row.people as PersonResult[],
-          scrapedAt: row.created_at,
+          url: row.search_url, status: 200, totalResults: row.total_results,
+          people: row.people as PersonResult[], scrapedAt: row.created_at,
           person: {
-            firstName: row.search_first,
-            lastName: row.search_last,
-            city: row.search_city,
-            state: row.search_state,
-            zipcode: row.search_zipcode || "",
+            firstName: row.search_first, lastName: row.search_last,
+            city: row.search_city, state: row.search_state, zipcode: row.search_zipcode || "",
           },
         }));
-        setDbHistory(mapped);
         setHistory(mapped.slice(0, 20));
       }
     } catch (err) {
       console.error("Failed to load history:", err);
-    } finally {
-      setLoadingHistory(false);
     }
   };
 
@@ -317,25 +98,6 @@ const Dashboard = () => {
     }
   };
 
-  const saveApiKey = async () => {
-    if (!apiKeyInput.trim()) { toast({ title: "API key is required", variant: "destructive" }); return; }
-    setSavingKey(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      const { error } = await supabase.from("user_api_keys").upsert(
-        { user_id: user.id, api_key: apiKeyInput.trim(), updated_at: new Date().toISOString() },
-        { onConflict: "user_id" }
-      );
-      if (error) throw error;
-      setApiKey(apiKeyInput.trim());
-      setSettingsOpen(false);
-      toast({ title: "API key saved" });
-    } catch (error: any) {
-      toast({ title: "Failed to save API key", description: error.message, variant: "destructive" });
-    } finally { setSavingKey(false); }
-  };
-
   const scrapeUrl = async (targetUrl: string, person: PersonInput): Promise<ScrapeResult> => {
     const { data, error } = await supabase.functions.invoke("scrape", {
       body: { url: targetUrl, apiKey },
@@ -343,12 +105,9 @@ const Dashboard = () => {
     if (error) throw error;
     if (data.error) throw new Error(data.error);
     return {
-      url: targetUrl,
-      status: data.status || 200,
-      totalResults: data.totalResults || 0,
-      people: data.people || [],
-      scrapedAt: new Date().toISOString(),
-      person,
+      url: targetUrl, status: data.status || 200,
+      totalResults: data.totalResults || 0, people: data.people || [],
+      scrapedAt: new Date().toISOString(), person,
     };
   };
 
@@ -357,54 +116,33 @@ const Dashboard = () => {
     toast({ title: `${label} copied` });
   };
 
-  const filterByZip = (scrapeResult: ScrapeResult, zip: string) => {
-    if (!zip) return;
-    const z = zip.trim().substring(0, 5);
-    if (!z) return;
-    scrapeResult.people = scrapeResult.people.filter((p) => {
-      const currentAddr = p.currentAddress || "";
-      const prevAddrs = p.previousAddresses.join(" ");
-      return currentAddr.includes(z) || prevAddrs.includes(z);
-    });
-    scrapeResult.totalResults = scrapeResult.people.length;
-  };
-
   const checkCache = async (person: PersonInput): Promise<ScrapeResult | null> => {
     const twentyFourHoursAgo = new Date();
     twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
     const { data } = await supabase
-      .from("search_results")
-      .select("*")
+      .from("search_results").select("*")
       .eq("search_first", person.firstName.trim())
       .eq("search_last", person.lastName.trim())
       .eq("search_city", person.city.trim())
       .eq("search_state", normalizeState(person.state))
       .gte("created_at", twentyFourHoursAgo.toISOString())
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (data) {
       return {
-        url: data.search_url,
-        status: 200,
-        totalResults: data.total_results,
-        people: data.people as PersonResult[],
-        scrapedAt: data.created_at,
-        person,
+        url: data.search_url, status: 200, totalResults: data.total_results,
+        people: data.people as PersonResult[], scrapedAt: data.created_at, person,
       };
     }
     return null;
   };
 
-  const handleScrape = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!firstName || !lastName || !city || !state) {
+  const handleSearch = async (person: PersonInput) => {
+    if (!person.firstName || !person.lastName || !person.city || !person.state) {
       toast({ title: "All fields required", variant: "destructive" }); return;
     }
     if (!apiKey) { setSettingsOpen(true); toast({ title: "API key required", variant: "destructive" }); return; }
     if (isDisabled) { toast({ title: "Account disabled", description: "Contact admin.", variant: "destructive" }); return; }
 
-    const person: PersonInput = { firstName, lastName, city, state, zipcode };
     const url = buildUrl(person);
     setLoading(true); setResult(null);
 
@@ -422,7 +160,15 @@ const Dashboard = () => {
 
       const scrapeResult = await scrapeUrl(url, person);
       filterByZip(scrapeResult, person.zipcode);
-      
+
+      // "No results don't count" — don't save if 0 results
+      if (scrapeResult.people.length === 0) {
+        setResult(scrapeResult);
+        toast({ title: "No results found", description: "This search did not count against your credits." });
+        setLoading(false);
+        return;
+      }
+
       setResult(scrapeResult);
       setHistory((prev) => [scrapeResult, ...prev].slice(0, 20));
       await saveResultToDb(scrapeResult);
@@ -430,46 +176,9 @@ const Dashboard = () => {
       toast({ title: "Search complete", description: `Found ${scrapeResult.totalResults} result(s), ${totalEmails} email(s)` });
     } catch (error: any) {
       toast({ title: "Search failed", description: error.message, variant: "destructive" });
-    } finally { setLoading(false); }
-  };
-
-  const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      const lines = text.split(/\r?\n/).filter(Boolean);
-      if (lines.length < 2) { toast({ title: "Invalid CSV", variant: "destructive" }); return; }
-      const headerCols = lines[0].split(",").map((c) => c.trim().toLowerCase().replace(/^["']|["']$/g, ""));
-      const findCol = (names: string[]) => headerCols.findIndex((h) => names.some((n) => h.includes(n)));
-      const firstIdx = findCol(["first", "firstname", "first_name"]);
-      const lastIdx = findCol(["last", "lastname", "last_name"]);
-      const cityIdx = findCol(["city"]);
-      const stateIdx = findCol(["state"]);
-      const zipIdx = findCol(["zip", "zipcode", "zip_code", "postal"]);
-      if (firstIdx === -1 || lastIdx === -1 || cityIdx === -1 || stateIdx === -1) {
-        toast({ title: "Missing columns", description: "Need: first name, last name, city, state.", variant: "destructive" }); return;
-      }
-      const items: BulkItem[] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(",").map((c) => c.trim().replace(/^["']|["']$/g, ""));
-        const person: PersonInput = {
-          firstName: cols[firstIdx] || "", lastName: cols[lastIdx] || "",
-          city: cols[cityIdx] || "", state: cols[stateIdx] || "",
-          zipcode: zipIdx !== -1 ? (cols[zipIdx] || "") : "",
-        };
-        if (person.firstName && person.lastName && person.city && person.state) {
-          items.push({ person, url: buildUrl(person), status: "pending" });
-        }
-      }
-      if (items.length === 0) { toast({ title: "No valid rows", variant: "destructive" }); return; }
-      if (items.length > 500) { toast({ title: "Max 500 per batch", variant: "destructive" }); return; }
-      setBulkItems(items);
-      toast({ title: `${items.length} people loaded` });
-    };
-    reader.readAsText(file);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    } finally {
+      setLoading(false);
+    }
   };
 
   const runBulkScrape = async () => {
@@ -477,6 +186,7 @@ const Dashboard = () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { toast({ title: "Not authenticated", variant: "destructive" }); return; }
     setBulkRunning(true); abortRef.current = false;
+
     for (let i = 0; i < bulkItems.length; i++) {
       if (abortRef.current) break;
       if (bulkItems[i].status === "done") continue;
@@ -484,51 +194,96 @@ const Dashboard = () => {
       try {
         const result = await scrapeUrl(bulkItems[i].url, bulkItems[i].person);
         filterByZip(result, bulkItems[i].person.zipcode);
-        await saveResultToDb({ ...result, person: bulkItems[i].person });
+        // Only save if has results
+        if (result.people.length > 0) {
+          await saveResultToDb({ ...result, person: bulkItems[i].person });
+        }
         setBulkItems((prev) => prev.map((item, idx) => (idx === i ? { ...item, status: "done", result } : item)));
         setHistory((prev) => [result, ...prev].slice(0, 50));
         if (i < bulkItems.length - 1) await new Promise(r => setTimeout(r, 3000));
       } catch (error: any) {
-        setBulkItems((prev) => prev.map((item, idx) => idx === i ? { ...item, status: "error", error: error.message } : item));
+        // Check for credits exhaustion
+        const msg = error.message || "";
+        if (msg.includes("402") || msg.toLowerCase().includes("credit")) {
+          toast({ title: "Credits exhausted", description: "Stopping bulk search. Partial results saved.", variant: "destructive" });
+          setBulkItems((prev) => prev.map((item, idx) =>
+            idx === i ? { ...item, status: "error", error: "Credits exhausted" } :
+            idx > i && item.status === "pending" ? { ...item, status: "error", error: "Not processed - credits exhausted" } : item
+          ));
+          break;
+        }
+        setBulkItems((prev) => prev.map((item, idx) => idx === i ? { ...item, status: "error", error: msg } : item));
       }
     }
+
+    // Retry failed rows (except credits exhaustion) once
+    const failedIndices = bulkItems
+      .map((item, idx) => ({ item, idx }))
+      .filter(({ item }) => item.status === "error" && !item.error?.includes("credit") && !item.error?.includes("Not processed"));
+
+    for (const { idx } of failedIndices) {
+      if (abortRef.current) break;
+      setBulkItems((prev) => prev.map((item, i) => (i === idx ? { ...item, status: "scraping", error: undefined } : item)));
+      try {
+        const result = await scrapeUrl(bulkItems[idx].url, bulkItems[idx].person);
+        filterByZip(result, bulkItems[idx].person.zipcode);
+        if (result.people.length > 0) {
+          await saveResultToDb({ ...result, person: bulkItems[idx].person });
+        }
+        setBulkItems((prev) => prev.map((item, i) => (i === idx ? { ...item, status: "done", result } : item)));
+      } catch (error: any) {
+        setBulkItems((prev) => prev.map((item, i) => i === idx ? { ...item, status: "error", error: error.message } : item));
+      }
+    }
+
     setBulkRunning(false);
     toast({ title: "Bulk search complete" });
+    loadHistory();
   };
 
   const exportBulkResults = () => {
-    const completed = bulkItems.filter((i) => i.status === "done" && i.result);
-    if (completed.length === 0) { toast({ title: "No results", variant: "destructive" }); return; }
-    const csvRows = ["search_first,search_last,search_city,search_state,result_name,age,deceased,emails,phones,phone_types,carriers"];
-    for (const item of completed) {
+    const csvRows = ["search_first,search_last,search_city,search_state,search_zipcode,status,result_name,age,deceased,current_address,emails,phones,phone_types,carriers,relatives"];
+    for (const item of bulkItems) {
       const p = item.person;
-      for (const r of item.result!.people) {
-        const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+      const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+      if (item.status === "done" && item.result && item.result.people.length > 0) {
+        for (const r of item.result.people) {
+          csvRows.push([
+            esc(p.firstName), esc(p.lastName), esc(p.city), esc(p.state), esc(p.zipcode),
+            esc("success"),
+            esc(r.name), esc(r.age || ""), esc(r.deceased ? "Yes" : "No"),
+            esc(r.currentAddress || ""),
+            esc(r.emails.join("; ")),
+            esc(r.phones.map(ph => ph.number).join("; ")),
+            esc(r.phones.map(ph => ph.type).join("; ")),
+            esc(r.phones.map(ph => ph.carrier).join("; ")),
+            esc(r.relatives.join("; ")),
+          ].join(","));
+        }
+      } else {
+        const status = item.error?.includes("credit") ? "credits_exhausted" :
+          item.error?.includes("Not processed") ? "not_processed" :
+          item.status === "error" ? "failed" : "not_processed";
         csvRows.push([
-          esc(p.firstName), esc(p.lastName), esc(p.city), esc(p.state),
-          esc(r.name), esc(r.age || ""), esc(r.deceased ? "Yes" : "No"),
-          esc(r.emails.join("; ")),
-          esc(r.phones.map(ph => ph.number).join("; ")),
-          esc(r.phones.map(ph => ph.type).join("; ")),
-          esc(r.phones.map(ph => ph.carrier).join("; ")),
+          esc(p.firstName), esc(p.lastName), esc(p.city), esc(p.state), esc(p.zipcode),
+          esc(status), "", "", "", "", "", "", "", "", "",
         ].join(","));
       }
     }
     const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `people-search-${Date.now()}.csv`;
+    a.download = `ownertrace-export-${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
 
-  const handleLogout = async () => { await supabase.auth.signOut(); window.location.href = "/auth"; };
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = "/auth";
+  };
 
   const maskedKey = apiKey ? `${apiKey.slice(0, 6)}${"•".repeat(Math.max(0, apiKey.length - 10))}${apiKey.slice(-4)}` : "";
-  const bulkDone = bulkItems.filter((i) => i.status === "done").length;
-  const bulkError = bulkItems.filter((i) => i.status === "error").length;
-  const bulkTotal = bulkItems.length;
-  const bulkProgress = bulkTotal > 0 ? ((bulkDone + bulkError) / bulkTotal) * 100 : 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -539,37 +294,14 @@ const Dashboard = () => {
             <span className="font-bold font-heading">OwnerTrace</span>
           </div>
           <div className="flex items-center gap-2">
-            <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-              <DialogTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-1.5">
-                  <Settings className="h-4 w-4" /><span className="hidden sm:inline">Settings</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle className="font-heading">API Key Settings</DialogTitle>
-                  <DialogDescription>
-                    Enter your scrape.do API key. Get one at{" "}
-                    <a href="https://scrape.do" target="_blank" rel="noopener noreferrer" className="text-primary underline">scrape.do</a>
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 pt-2">
-                  <div className="relative">
-                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)}
-                      placeholder="Enter your scrape.do API key" type={showKey ? "text" : "password"}
-                      className="pl-10 pr-10 font-mono text-sm" />
-                    <button type="button" onClick={() => setShowKey(!showKey)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                      {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  <Button onClick={saveApiKey} disabled={savingKey} className="w-full" variant="hero">
-                    {savingKey ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save API Key"}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+            <SettingsDialog
+              open={settingsOpen}
+              onOpenChange={setSettingsOpen}
+              apiKey={apiKey}
+              onApiKeySaved={setApiKey}
+              disabled={bulkRunning}
+              disabledReason={bulkRunning ? "Cannot change API key while bulk search is running" : undefined}
+            />
             {isAdmin && (
               <Button variant="ghost" size="sm" onClick={() => navigate("/admin")} className="gap-1.5">
                 <ShieldCheck className="h-4 w-4" /><span className="hidden sm:inline">Admin</span>
@@ -587,7 +319,7 @@ const Dashboard = () => {
               <Key className="h-5 w-5 text-primary" />
               <div>
                 <p className="text-sm font-medium">API key required</p>
-                <p className="text-xs text-muted-foreground">Add your scrape.do API key. 10 credits per search.</p>
+                <p className="text-xs text-muted-foreground">Add your scrape.do API key to start searching.</p>
               </div>
             </div>
             <Button variant="hero" size="sm" onClick={() => setSettingsOpen(true)}>Add Key</Button>
@@ -598,7 +330,7 @@ const Dashboard = () => {
           <div className="mb-6 flex items-center gap-2 text-xs text-muted-foreground">
             <Key className="h-3.5 w-3.5" />
             <span className="font-mono">{maskedKey}</span>
-            <span className="text-primary/60">• 10 credits/search</span>
+            <span className="text-primary/60">• Validated ✓</span>
           </div>
         )}
 
@@ -613,118 +345,19 @@ const Dashboard = () => {
             </TabsList>
 
             <TabsContent value="single">
-              <form onSubmit={handleScrape} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">First Name</label>
-                    <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Steven" required />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Last Name</label>
-                    <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Silianoff" required />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">City</label>
-                    <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="New York" required />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">State</label>
-                    <Input value={state} onChange={(e) => setState(e.target.value)} placeholder="NY" required />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Zipcode (optional)</label>
-                    <Input value={zipcode} onChange={(e) => setZipcode(e.target.value)} placeholder="10001" />
-                  </div>
-                </div>
-
-                {firstName && lastName && city && state && (
-                  <div className="text-xs text-muted-foreground font-mono bg-muted/50 rounded-lg px-3 py-2 truncate">
-                    {buildUrl({ firstName, lastName, city, state, zipcode })}
-                  </div>
-                )}
-
-                <Button type="submit" variant="hero" disabled={loading} className="w-full sm:w-auto">
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
-                  Search Person
-                </Button>
-              </form>
+              <SearchForm onSearch={handleSearch} loading={loading} />
             </TabsContent>
 
             <TabsContent value="bulk">
-              <div className="space-y-4">
-                {bulkItems.length === 0 && (
-                  <>
-                    <div className="bg-muted/30 border border-border rounded-lg p-3 text-xs text-muted-foreground space-y-1">
-                      <p className="font-medium text-foreground text-sm">CSV Format</p>
-                      <p>Required: <span className="font-mono text-primary">first_name</span>, <span className="font-mono text-primary">last_name</span>, <span className="font-mono text-primary">city</span>, <span className="font-mono text-primary">state</span></p>
-                      <p>Optional: <span className="font-mono text-primary">zipcode</span> • 10 credits per person</p>
-                    </div>
-                    <label htmlFor="csv-upload"
-                      className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-border rounded-xl p-10 cursor-pointer hover:border-primary/40 transition-colors">
-                      <Upload className="h-8 w-8 text-muted-foreground" />
-                      <p className="text-sm font-medium">Upload CSV file</p>
-                      <p className="text-xs text-muted-foreground">Max 500 per batch</p>
-                      <input id="csv-upload" ref={fileInputRef} type="file" accept=".csv,.txt" onChange={handleCsvUpload} className="hidden" />
-                    </label>
-                  </>
-                )}
-
-                {bulkItems.length > 0 && (
-                  <div className="space-y-4">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                      {!bulkRunning ? (
-                        <div className="flex gap-2">
-                          <Button variant="hero" onClick={runBulkScrape} className="gap-2">
-                            <Search className="h-4 w-4" />Search {bulkTotal} People
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => setBulkItems([])}><X className="h-4 w-4" /></Button>
-                        </div>
-                      ) : (
-                        <Button variant="destructive" onClick={() => { abortRef.current = true; }} className="gap-2">
-                          <X className="h-4 w-4" />Stop
-                        </Button>
-                      )}
-                      {bulkDone > 0 && !bulkRunning && (
-                        <Button variant="outline" onClick={exportBulkResults} className="gap-2 ml-auto">
-                          <Download className="h-4 w-4" />Export CSV
-                        </Button>
-                      )}
-                    </div>
-
-                    {(bulkRunning || bulkDone + bulkError > 0) && (
-                      <div className="space-y-2">
-                        <Progress value={bulkProgress} className="h-2" />
-                        <div className="flex gap-4 text-xs text-muted-foreground">
-                          <span>{bulkDone} done</span>
-                          {bulkError > 0 && <span className="text-destructive">{bulkError} failed</span>}
-                          <span>{bulkTotal - bulkDone - bulkError} remaining</span>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="bg-card border border-border rounded-xl overflow-hidden max-h-[400px] overflow-y-auto">
-                      {bulkItems.map((item, i) => (
-                        <div key={i} className="flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-b-0 hover:bg-muted/30">
-                          {item.status === "pending" && <span className="h-4 w-4 rounded-full border border-border flex-shrink-0" />}
-                          {item.status === "scraping" && <Loader2 className="h-4 w-4 text-primary animate-spin flex-shrink-0" />}
-                          {item.status === "done" && <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" />}
-                          {item.status === "error" && <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />}
-                          <span className="text-sm truncate flex-1">
-                            {item.person.firstName} {item.person.lastName} — {item.person.city}, {item.person.state.toUpperCase()}
-                          </span>
-                          {item.status === "done" && item.result && (
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              <span className="text-xs text-muted-foreground">{item.result.people.length} results</span>
-                              <button onClick={() => setResult(item.result!)} className="text-xs text-primary hover:underline">View</button>
-                            </div>
-                          )}
-                          {item.status === "error" && <span className="text-xs text-destructive truncate max-w-[200px]">{item.error}</span>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <BulkUpload
+                bulkItems={bulkItems}
+                setBulkItems={setBulkItems}
+                bulkRunning={bulkRunning}
+                onRunBulk={runBulkScrape}
+                onStopBulk={() => { abortRef.current = true; }}
+                onViewResult={setResult}
+                onExport={exportBulkResults}
+              />
             </TabsContent>
           </Tabs>
         </div>
@@ -751,27 +384,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* History */}
-        {history.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-lg font-semibold font-heading">Recent Searches (Last 7 Days)</h2>
-            </div>
-            <div className="space-y-2">
-              {history.map((item, i) => (
-                <button key={i} onClick={() => setResult(item)}
-                  className="w-full text-left bg-card border border-border rounded-lg p-3 hover:border-primary/30 transition-colors flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm">{item.person.firstName} {item.person.lastName} — {item.person.city}, {item.person.state.toUpperCase()}</span>
-                    <span className="text-xs text-primary">{item.totalResults} results</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">{new Date(item.scrapedAt).toLocaleDateString()} {new Date(item.scrapedAt).toLocaleTimeString()}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <SearchHistory history={history} onSelect={setResult} />
       </main>
     </div>
   );

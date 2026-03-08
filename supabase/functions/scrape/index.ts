@@ -24,20 +24,15 @@ interface PersonResult {
 
 function parseListingPage(html: string): PersonResult[] {
   const results: PersonResult[] = [];
-
-  // Split by card-hover divs (each person result)
-  const cardRegex = /<div class="card card-hover"[^>]*>[\s\S]*?<\/div>\s*<\/div>\s*<\/div>\s*<\/div>/g;
-  
-  // Better approach: find each person card by the name heading pattern
-  const personBlocks: string[] = [];
   const namePattern = /<h2 class="mb-0">\s*<i class="fad fa-user-circle/g;
   let match;
   const positions: number[] = [];
-  
+
   while ((match = namePattern.exec(html)) !== null) {
     positions.push(match.index);
   }
-  
+
+  const personBlocks: string[] = [];
   for (let i = 0; i < positions.length; i++) {
     const start = positions[i];
     const end = i < positions.length - 1 ? positions[i + 1] : html.length;
@@ -46,64 +41,45 @@ function parseListingPage(html: string): PersonResult[] {
 
   for (const block of personBlocks) {
     const person: PersonResult = {
-      name: "",
-      age: null,
-      deceased: false,
-      currentAddress: null,
-      previousAddresses: [],
-      moreAddresses: 0,
-      aliases: [],
-      phones: [],
-      morePhones: 0,
-      emails: [],
-      relatives: [],
-      associates: [],
-      detailUrl: null,
+      name: "", age: null, deceased: false, currentAddress: null,
+      previousAddresses: [], moreAddresses: 0, aliases: [],
+      phones: [], morePhones: 0, emails: [], relatives: [],
+      associates: [], detailUrl: null,
     };
 
-    // Name
     const nameMatch = block.match(/<span class="name-given">\s*([\s\S]*?)\s*<\/span>/);
     if (nameMatch) person.name = nameMatch[1].trim();
 
-    // Age
     const ageMatch = block.match(/<span class="age">(\d+)<\/span>/);
     if (ageMatch) person.age = ageMatch[1];
 
-    // Deceased
     if (/deceased/i.test(block)) person.deceased = true;
 
-    // Current address
     const currentAddrMatch = block.match(/<p class="address-current[^"]*"[^>]*>\s*<a[^>]*>([^<]+)<\/a>/);
     if (currentAddrMatch) person.currentAddress = currentAddrMatch[1].trim();
 
-    // Previous addresses
     const prevAddrRegex = /<p class="[^"]*address-previous[^"]*"[^>]*>\s*<a[^>]*>([^<]+)<\/a>/g;
     let addrMatch;
     while ((addrMatch = prevAddrRegex.exec(block)) !== null) {
       person.previousAddresses.push(addrMatch[1].trim());
     }
 
-    // More addresses count
     const moreAddrMatch = block.match(/\[(\d+)\] more\.\.\./);
     if (moreAddrMatch) person.moreAddresses = parseInt(moreAddrMatch[1]);
 
-    // Aliases
     const aliasRegex = /<span class="aka">([^<]+)<\/span>/g;
     let aliasMatch;
     while ((aliasMatch = aliasRegex.exec(block)) !== null) {
       person.aliases.push(aliasMatch[1].trim());
     }
 
-    // Phones with type and carrier from title attribute
-    // title="Find other people associated with (315) 573-3358 (Wireless - Cellco Partnership dba Verizon Wireless - NY)"
     const phoneRegex = /<a[^>]*title="[^"]*\((\d{3})\)\s*(\d{3})-(\d{4})\s*\(([^)]+)\)"[^>]*class="phone"[^>]*>\((\d{3})\)\s*(\d{3})-(\d{4})<\/a>/g;
     let phoneMatch;
     while ((phoneMatch = phoneRegex.exec(block)) !== null) {
       const number = `(${phoneMatch[5]}) ${phoneMatch[6]}-${phoneMatch[7]}`;
-      const info = phoneMatch[4]; // e.g. "Wireless - Cellco Partnership dba Verizon Wireless - NY"
+      const info = phoneMatch[4];
       const parts = info.split(" - ");
       const type = parts[0]?.trim() || "";
-      // Last part may be a 2-letter state code — strip it if so
       const lastPart = parts[parts.length - 1]?.trim() || "";
       const hasStateCode = /^[A-Z]{2}$/.test(lastPart);
       const carrierParts = hasStateCode ? parts.slice(1, -1) : parts.slice(1);
@@ -111,11 +87,9 @@ function parseListingPage(html: string): PersonResult[] {
       person.phones.push({ number, type, carrier });
     }
 
-    // More phones count
     const morePhonesMatch = block.match(/class="more-phones[\s\S]*?\[(\d+)\] more/);
     if (morePhonesMatch) person.morePhones = parseInt(morePhonesMatch[1]);
 
-    // Emails - regex fallback in the block
     const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
     const siteDomains = new Set(["cyberbackgroundchecks.com", "example.com"]);
     let emailMatch;
@@ -126,42 +100,36 @@ function parseListingPage(html: string): PersonResult[] {
       }
     }
 
-    // Relatives
     const relativeRegex = /<a[^>]*class="relative"[^>]*>([^<]+)<\/a>/g;
     let relMatch;
     while ((relMatch = relativeRegex.exec(block)) !== null) {
       person.relatives.push(relMatch[1].trim());
     }
 
-    // Associates
     const assocRegex = /<a[^>]*class="associate"[^>]*>([^<]+)<\/a>/g;
     let assocMatch;
     while ((assocMatch = assocRegex.exec(block)) !== null) {
       person.associates.push(assocMatch[1].trim());
     }
 
-    // Detail URL
     const detailMatch = block.match(/href="(https:\/\/www\.cyberbackgroundchecks\.com\/detail\/[^"]+)"/);
     if (detailMatch) person.detailUrl = detailMatch[1];
 
     if (person.name) results.push(person);
   }
 
-  // Also check for emails in JSON-LD if present
+  // Check JSON-LD for emails
   const jsonLdMatches = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
   for (const jmatch of jsonLdMatches) {
     try {
       const data = JSON.parse(jmatch[1]);
       const items = Array.isArray(data) ? data : [data];
       for (const item of items) {
-        if (item.email) {
+        if (item.email && results.length > 0) {
           const vals = Array.isArray(item.email) ? item.email : [item.email];
-          // Add to first result if exists
-          if (results.length > 0) {
-            for (const e of vals) {
-              const el = e.toLowerCase();
-              if (!results[0].emails.includes(el)) results[0].emails.push(el);
-            }
+          for (const e of vals) {
+            const el = e.toLowerCase();
+            if (!results[0].emails.includes(el)) results[0].emails.push(el);
           }
         }
       }
@@ -169,6 +137,40 @@ function parseListingPage(html: string): PersonResult[] {
   }
 
   return results;
+}
+
+async function scrapeWithRetry(scrapeUrl: string, maxRetries = 3): Promise<{ html: string; status: number }> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Scrape attempt ${attempt}/${maxRetries}`);
+      const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(90000) });
+      const html = await response.text();
+
+      if (response.status === 200) {
+        return { html, status: 200 };
+      }
+
+      // Don't retry on 402 (credits exhausted) or 401/403 (auth issues)
+      if (response.status === 402 || response.status === 401 || response.status === 403) {
+        return { html, status: response.status };
+      }
+
+      lastError = new Error(`Scrape failed with status ${response.status}`);
+      console.warn(`Attempt ${attempt} failed with status ${response.status}`);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.warn(`Attempt ${attempt} error: ${lastError.message}`);
+    }
+
+    // Wait before retry (exponential backoff)
+    if (attempt < maxRetries) {
+      await new Promise(r => setTimeout(r, 2000 * attempt));
+    }
+  }
+
+  throw lastError || new Error("Scrape failed after retries");
 }
 
 Deno.serve(async (req) => {
@@ -191,9 +193,8 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -216,7 +217,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Build scrape.do API URL with super=true and geoCode=us (NO render)
     const params = new URLSearchParams({
       token: apiKey,
       url: url,
@@ -227,29 +227,26 @@ Deno.serve(async (req) => {
     const scrapeUrl = `https://api.scrape.do/?${params.toString()}`;
     console.log("Scraping:", url);
 
-    const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(90000) });
-    const html = await response.text();
+    // Use retry logic (3 attempts with exponential backoff)
+    const { html, status } = await scrapeWithRetry(scrapeUrl, 3);
 
-    if (response.status !== 200) {
+    if (status !== 200) {
+      const errorMsg = status === 402
+        ? "ScrapeDo credits exhausted. Please top up your account."
+        : `Scrape failed with status ${status}`;
       return new Response(
-        JSON.stringify({ error: `Scrape failed with status ${response.status}`, status: response.status }),
+        JSON.stringify({ error: errorMsg, status }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Parse the listing page HTML
     const people = parseListingPage(html);
 
-    // Count total results from the page
     const totalMatch = html.match(/<strong>(\d+)<\/strong>\s*results? for/);
     const totalResults = totalMatch ? parseInt(totalMatch[1]) : people.length;
 
     return new Response(
-      JSON.stringify({
-        status: response.status,
-        totalResults,
-        people,
-      }),
+      JSON.stringify({ status: 200, totalResults, people }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Key, User, FileSpreadsheet, ShieldCheck } from "lucide-react";
+import { Search, Key, User, FileSpreadsheet, ShieldCheck, Briefcase } from "lucide-react";
 
 import type { PersonInput, PersonResult, ScrapeResult, BulkItem } from "@/components/dashboard/types";
 import { buildUrl, normalizeState, filterByZip } from "@/components/dashboard/utils";
@@ -13,6 +13,7 @@ import SettingsDialog from "@/components/dashboard/SettingsDialog";
 import SearchForm from "@/components/dashboard/SearchForm";
 import BulkUpload from "@/components/dashboard/BulkUpload";
 import SearchHistory from "@/components/dashboard/SearchHistory";
+import JobsDashboard from "@/components/dashboard/JobsDashboard";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -148,8 +149,6 @@ const Dashboard = () => {
 
     try {
       await supabase.auth.getSession();
-
-      // Check 24h cache first
       const cached = await checkCache(person);
       if (cached) {
         setResult(cached);
@@ -161,7 +160,6 @@ const Dashboard = () => {
       const scrapeResult = await scrapeUrl(url, person);
       filterByZip(scrapeResult, person.zipcode);
 
-      // "No results don't count" — don't save if 0 results
       if (scrapeResult.people.length === 0) {
         setResult(scrapeResult);
         toast({ title: "No results found", description: "This search did not count against your credits." });
@@ -181,64 +179,118 @@ const Dashboard = () => {
     }
   };
 
+  // Server-side bulk processing
   const runBulkScrape = async () => {
     if (!apiKey) { setSettingsOpen(true); return; }
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { toast({ title: "Not authenticated", variant: "destructive" }); return; }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!session || !user) { toast({ title: "Not authenticated", variant: "destructive" }); return; }
+
     setBulkRunning(true); abortRef.current = false;
 
-    for (let i = 0; i < bulkItems.length; i++) {
-      if (abortRef.current) break;
-      if (bulkItems[i].status === "done") continue;
-      setBulkItems((prev) => prev.map((item, idx) => (idx === i ? { ...item, status: "scraping" } : item)));
-      try {
-        const result = await scrapeUrl(bulkItems[i].url, bulkItems[i].person);
-        filterByZip(result, bulkItems[i].person.zipcode);
-        // Only save if has results
-        if (result.people.length > 0) {
-          await saveResultToDb({ ...result, person: bulkItems[i].person });
-        }
-        setBulkItems((prev) => prev.map((item, idx) => (idx === i ? { ...item, status: "done", result } : item)));
-        setHistory((prev) => [result, ...prev].slice(0, 50));
-        if (i < bulkItems.length - 1) await new Promise(r => setTimeout(r, 3000));
-      } catch (error: any) {
-        // Check for credits exhaustion
-        const msg = error.message || "";
-        if (msg.includes("402") || msg.toLowerCase().includes("credit")) {
-          toast({ title: "Credits exhausted", description: "Stopping bulk search. Partial results saved.", variant: "destructive" });
-          setBulkItems((prev) => prev.map((item, idx) =>
-            idx === i ? { ...item, status: "error", error: "Credits exhausted" } :
-            idx > i && item.status === "pending" ? { ...item, status: "error", error: "Not processed - credits exhausted" } : item
-          ));
+    try {
+      // Create job in DB
+      const { data: job, error: jobError } = await supabase.from("bulk_jobs").insert({
+        user_id: user.id,
+        status: "pending",
+        total_items: bulkItems.length,
+      }).select().single();
+
+      if (jobError || !job) throw new Error("Failed to create job");
+
+      // Insert all items
+      const itemInserts = bulkItems.map(item => ({
+        job_id: job.id,
+        first_name: item.person.firstName,
+        last_name: item.person.lastName,
+        city: item.person.city,
+        state: item.person.state,
+        zipcode: item.person.zipcode || "",
+        status: "pending" as const,
+      }));
+
+      const { error: insertError } = await supabase.from("bulk_job_items").insert(itemInserts);
+      if (insertError) throw new Error("Failed to insert job items");
+
+      // Process in batches by calling the edge function repeatedly
+      let hasMore = true;
+      let batchNum = 0;
+
+      while (hasMore && !abortRef.current) {
+        batchNum++;
+
+        const { data, error } = await supabase.functions.invoke("bulk-process", {
+          body: { jobId: job.id },
+        });
+
+        if (error) {
+          console.error("Batch error:", error);
+          toast({ title: "Batch processing error", description: error.message, variant: "destructive" });
           break;
         }
-        setBulkItems((prev) => prev.map((item, idx) => idx === i ? { ...item, status: "error", error: msg } : item));
-      }
-    }
 
-    // Retry failed rows (except credits exhaustion) once
-    const failedIndices = bulkItems
-      .map((item, idx) => ({ item, idx }))
-      .filter(({ item }) => item.status === "error" && !item.error?.includes("credit") && !item.error?.includes("Not processed"));
-
-    for (const { idx } of failedIndices) {
-      if (abortRef.current) break;
-      setBulkItems((prev) => prev.map((item, i) => (i === idx ? { ...item, status: "scraping", error: undefined } : item)));
-      try {
-        const result = await scrapeUrl(bulkItems[idx].url, bulkItems[idx].person);
-        filterByZip(result, bulkItems[idx].person.zipcode);
-        if (result.people.length > 0) {
-          await saveResultToDb({ ...result, person: bulkItems[idx].person });
+        if (data?.creditsExhausted) {
+          toast({ title: "Credits exhausted", description: "Partial results saved.", variant: "destructive" });
+          break;
         }
-        setBulkItems((prev) => prev.map((item, i) => (i === idx ? { ...item, status: "done", result } : item)));
-      } catch (error: any) {
-        setBulkItems((prev) => prev.map((item, i) => i === idx ? { ...item, status: "error", error: error.message } : item));
-      }
-    }
 
-    setBulkRunning(false);
-    toast({ title: "Bulk search complete" });
-    loadHistory();
+        hasMore = data?.hasMore === true;
+
+        // Update local UI from DB
+        const { data: updatedItems } = await supabase
+          .from("bulk_job_items").select("*").eq("job_id", job.id).order("created_at", { ascending: true });
+
+        if (updatedItems) {
+          setBulkItems(updatedItems.map((dbItem: any) => ({
+            person: {
+              firstName: dbItem.first_name,
+              lastName: dbItem.last_name,
+              city: dbItem.city,
+              state: dbItem.state,
+              zipcode: dbItem.zipcode || "",
+            },
+            url: buildUrl({
+              firstName: dbItem.first_name,
+              lastName: dbItem.last_name,
+              city: dbItem.city,
+              state: dbItem.state,
+              zipcode: dbItem.zipcode || "",
+            }),
+            status: dbItem.status === "done" ? "done" :
+              dbItem.status === "error" || dbItem.status === "credits_exhausted" || dbItem.status === "not_processed" ? "error" :
+              dbItem.status === "processing" ? "scraping" : "pending",
+            result: dbItem.result ? {
+              url: dbItem.result.url || "",
+              status: 200,
+              totalResults: dbItem.result.totalResults || 0,
+              people: dbItem.result.people || [],
+              scrapedAt: dbItem.updated_at,
+              person: {
+                firstName: dbItem.first_name,
+                lastName: dbItem.last_name,
+                city: dbItem.city,
+                state: dbItem.state,
+                zipcode: dbItem.zipcode || "",
+              },
+            } : undefined,
+            error: dbItem.error || undefined,
+          })));
+        }
+      }
+
+      if (abortRef.current) {
+        await supabase.from("bulk_jobs").update({ status: "cancelled" }).eq("id", job.id);
+        toast({ title: "Bulk search cancelled" });
+      } else {
+        toast({ title: "Bulk search complete" });
+      }
+
+      loadHistory();
+    } catch (error: any) {
+      toast({ title: "Bulk search failed", description: error.message, variant: "destructive" });
+    } finally {
+      setBulkRunning(false);
+    }
   };
 
   const exportBulkResults = () => {
@@ -274,6 +326,46 @@ const Dashboard = () => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `ownertrace-export-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const exportJobResults = async (jobId: string) => {
+    const { data: items } = await supabase
+      .from("bulk_job_items").select("*").eq("job_id", jobId).order("created_at", { ascending: true });
+
+    if (!items || items.length === 0) {
+      toast({ title: "No data to export", variant: "destructive" });
+      return;
+    }
+
+    const csvRows = ["search_first,search_last,search_city,search_state,search_zipcode,status,result_name,age,deceased,current_address,emails,phones,relatives"];
+    const esc = (s: string) => `"${(s || "").replace(/"/g, '""')}"`;
+
+    for (const item of items) {
+      const res = item.result as any;
+      if (item.status === "done" && res?.people?.length > 0) {
+        for (const r of res.people) {
+          csvRows.push([
+            esc(item.first_name), esc(item.last_name), esc(item.city), esc(item.state), esc(item.zipcode || ""),
+            esc("success"), esc(r.name), esc(r.age || ""), esc(r.deceased ? "Yes" : "No"),
+            esc(r.currentAddress || ""), esc((r.emails || []).join("; ")),
+            esc((r.phones || []).map((p: any) => p.number).join("; ")),
+            esc((r.relatives || []).join("; ")),
+          ].join(","));
+        }
+      } else {
+        csvRows.push([
+          esc(item.first_name), esc(item.last_name), esc(item.city), esc(item.state), esc(item.zipcode || ""),
+          esc(item.status), "", "", "", "", "", "", "",
+        ].join(","));
+      }
+    }
+
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `ownertrace-job-${jobId.slice(0, 8)}-${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -341,7 +433,8 @@ const Dashboard = () => {
           <Tabs defaultValue="single" className="w-full">
             <TabsList className="mb-4">
               <TabsTrigger value="single" className="gap-2"><User className="h-4 w-4" />Single</TabsTrigger>
-              <TabsTrigger value="bulk" className="gap-2"><FileSpreadsheet className="h-4 w-4" />Bulk CSV</TabsTrigger>
+              <TabsTrigger value="bulk" className="gap-2"><FileSpreadsheet className="h-4 w-4" />Bulk Upload</TabsTrigger>
+              <TabsTrigger value="jobs" className="gap-2"><Briefcase className="h-4 w-4" />Jobs</TabsTrigger>
             </TabsList>
 
             <TabsContent value="single">
@@ -358,6 +451,10 @@ const Dashboard = () => {
                 onViewResult={setResult}
                 onExport={exportBulkResults}
               />
+            </TabsContent>
+
+            <TabsContent value="jobs">
+              <JobsDashboard onExportJob={exportJobResults} />
             </TabsContent>
           </Tabs>
         </div>

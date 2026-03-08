@@ -234,7 +234,25 @@ const Dashboard = () => {
 
   const { toast } = useToast();
 
-  useEffect(() => { loadApiKey(); loadHistory(); }, []);
+  useEffect(() => { loadApiKey(); loadHistory(); checkRole(); }, []);
+
+  const checkRole = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: roleData } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (roleData) setIsAdmin(true);
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("disabled")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (profileData?.disabled) setIsDisabled(true);
+  };
 
   const loadApiKey = async () => {
     const { data } = await supabase.from("user_api_keys").select("api_key").maybeSingle();

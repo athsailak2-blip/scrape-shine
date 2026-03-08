@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      search_results: {
+        Row: {
+          created_at: string
+          id: string
+          people: Json
+          search_city: string
+          search_first: string
+          search_last: string
+          search_state: string
+          search_url: string
+          search_zipcode: string | null
+          source: string
+          total_results: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          people?: Json
+          search_city: string
+          search_first: string
+          search_last: string
+          search_state: string
+          search_url: string
+          search_zipcode?: string | null
+          source?: string
+          total_results?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          people?: Json
+          search_city?: string
+          search_first?: string
+          search_last?: string
+          search_state?: string
+          search_url?: string
+          search_zipcode?: string | null
+          source?: string
+          total_results?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_api_keys: {
         Row: {
           api_key: string

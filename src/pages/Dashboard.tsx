@@ -223,12 +223,14 @@ const Dashboard = () => {
 
   const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
   const [bulkRunning, setBulkRunning] = useState(false);
+  const [dbHistory, setDbHistory] = useState<ScrapeResult[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef(false);
 
   const { toast } = useToast();
 
-  useEffect(() => { loadApiKey(); }, []);
+  useEffect(() => { loadApiKey(); loadHistory(); }, []);
 
   const loadApiKey = async () => {
     const { data } = await supabase.from("user_api_keys").select("api_key").maybeSingle();

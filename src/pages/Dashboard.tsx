@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Globe,
+  Search,
   Loader2,
   Copy,
   Settings,
@@ -46,6 +47,7 @@ import {
   AlertTriangle,
   ExternalLink,
   Clock,
+  ShieldCheck,
 } from "lucide-react";
 
 type PhoneInfo = { number: string; type: string; carrier: string };
@@ -205,6 +207,7 @@ const PersonCard = ({ person, onCopy }: { person: PersonResult; onCopy: (text: s
 );
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [city, setCity] = useState("");
@@ -219,6 +222,8 @@ const Dashboard = () => {
   const [showKey, setShowKey] = useState(false);
   const [savingKey, setSavingKey] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isDisabled, setIsDisabled] = useState(false);
 
   const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
   const [bulkRunning, setBulkRunning] = useState(false);
@@ -229,7 +234,25 @@ const Dashboard = () => {
 
   const { toast } = useToast();
 
-  useEffect(() => { loadApiKey(); loadHistory(); }, []);
+  useEffect(() => { loadApiKey(); loadHistory(); checkRole(); }, []);
+
+  const checkRole = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: roleData } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (roleData) setIsAdmin(true);
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("disabled")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (profileData?.disabled) setIsDisabled(true);
+  };
 
   const loadApiKey = async () => {
     const { data } = await supabase.from("user_api_keys").select("api_key").maybeSingle();
@@ -346,12 +369,40 @@ const Dashboard = () => {
     scrapeResult.totalResults = scrapeResult.people.length;
   };
 
+  const checkCache = async (person: PersonInput): Promise<ScrapeResult | null> => {
+    const twentyFourHoursAgo = new Date();
+    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+    const { data } = await supabase
+      .from("search_results")
+      .select("*")
+      .eq("search_first", person.firstName.trim())
+      .eq("search_last", person.lastName.trim())
+      .eq("search_city", person.city.trim())
+      .eq("search_state", normalizeState(person.state))
+      .gte("created_at", twentyFourHoursAgo.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (data) {
+      return {
+        url: data.search_url,
+        status: 200,
+        totalResults: data.total_results,
+        people: data.people as PersonResult[],
+        scrapedAt: data.created_at,
+        person,
+      };
+    }
+    return null;
+  };
+
   const handleScrape = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName || !lastName || !city || !state) {
       toast({ title: "All fields required", variant: "destructive" }); return;
     }
     if (!apiKey) { setSettingsOpen(true); toast({ title: "API key required", variant: "destructive" }); return; }
+    if (isDisabled) { toast({ title: "Account disabled", description: "Contact admin.", variant: "destructive" }); return; }
 
     const person: PersonInput = { firstName, lastName, city, state, zipcode };
     const url = buildUrl(person);
@@ -359,6 +410,16 @@ const Dashboard = () => {
 
     try {
       await supabase.auth.getSession();
+
+      // Check 24h cache first
+      const cached = await checkCache(person);
+      if (cached) {
+        setResult(cached);
+        toast({ title: "Cached result", description: "Showing result from last 24 hours." });
+        setLoading(false);
+        return;
+      }
+
       const scrapeResult = await scrapeUrl(url, person);
       filterByZip(scrapeResult, person.zipcode);
       
@@ -474,8 +535,8 @@ const Dashboard = () => {
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container flex items-center justify-between h-14 px-4">
           <div className="flex items-center gap-2">
-            <Globe className="h-5 w-5 text-primary" />
-            <span className="font-bold font-heading">ScrapeLab</span>
+            <Search className="h-5 w-5 text-primary" />
+            <span className="font-bold font-heading">OwnerTrace</span>
           </div>
           <div className="flex items-center gap-2">
             <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
@@ -509,6 +570,11 @@ const Dashboard = () => {
                 </div>
               </DialogContent>
             </Dialog>
+            {isAdmin && (
+              <Button variant="ghost" size="sm" onClick={() => navigate("/admin")} className="gap-1.5">
+                <ShieldCheck className="h-4 w-4" /><span className="hidden sm:inline">Admin</span>
+              </Button>
+            )}
             <Button variant="ghost" size="sm" onClick={handleLogout}>Sign out</Button>
           </div>
         </div>
@@ -578,7 +644,7 @@ const Dashboard = () => {
                 )}
 
                 <Button type="submit" variant="hero" disabled={loading} className="w-full sm:w-auto">
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Globe className="h-4 w-4 mr-2" />}
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
                   Search Person
                 </Button>
               </form>
@@ -609,7 +675,7 @@ const Dashboard = () => {
                       {!bulkRunning ? (
                         <div className="flex gap-2">
                           <Button variant="hero" onClick={runBulkScrape} className="gap-2">
-                            <Globe className="h-4 w-4" />Search {bulkTotal} People
+                            <Search className="h-4 w-4" />Search {bulkTotal} People
                           </Button>
                           <Button variant="ghost" size="icon" onClick={() => setBulkItems([])}><X className="h-4 w-4" /></Button>
                         </div>

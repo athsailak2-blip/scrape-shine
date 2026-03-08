@@ -39,4 +39,5 @@ export type BulkItem = {
   status: "pending" | "scraping" | "done" | "error";
   result?: ScrapeResult;
   error?: string;
+  originalRow?: Record<string, string>;
 };

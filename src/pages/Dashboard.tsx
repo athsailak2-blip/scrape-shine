@@ -473,6 +473,14 @@ const Dashboard = () => {
         </div>
       </header>
 
+      <OnboardingTutorial
+        open={tutorialOpen}
+        onOpenChange={setTutorialOpen}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onSelectSingleTab={() => setActiveTab("single")}
+        onSelectBulkTab={() => setActiveTab("bulk")}
+      />
+
       <main className="container px-4 py-8 max-w-5xl">
         {!apiKey && (
           <div className="mb-6 bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-center justify-between">

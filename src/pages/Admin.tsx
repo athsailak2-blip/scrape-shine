@@ -286,17 +286,27 @@ const Admin = () => {
                     )}
                   </TableCell>
                   <TableCell>
-                    {user.role !== "admin" && (
+                    <div className="flex gap-2">
                       <Button
-                        variant={user.disabled ? "outline" : "destructive"}
+                        variant="outline"
                         size="sm"
-                        disabled={toggling === user.id}
-                        onClick={() => toggleDisabled(user.id, user.disabled)}
+                        onClick={() => loadUserHistory(user.id, user.email)}
                         className="text-xs h-7"
                       >
-                        {toggling === user.id ? <Loader2 className="h-3 w-3 animate-spin" /> : user.disabled ? "Enable" : "Disable"}
+                        <History className="h-3 w-3 mr-1" /> History
                       </Button>
-                    )}
+                      {user.role !== "admin" && (
+                        <Button
+                          variant={user.disabled ? "outline" : "destructive"}
+                          size="sm"
+                          disabled={toggling === user.id}
+                          onClick={() => toggleDisabled(user.id, user.disabled)}
+                          className="text-xs h-7"
+                        >
+                          {toggling === user.id ? <Loader2 className="h-3 w-3 animate-spin" /> : user.disabled ? "Enable" : "Disable"}
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

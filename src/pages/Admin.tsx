@@ -266,7 +266,7 @@ const Admin = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((user) => (
+              {filteredUsers.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell className="font-mono text-sm">{user.email}</TableCell>
                   <TableCell>

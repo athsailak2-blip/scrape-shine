@@ -201,7 +201,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { url, apiKey } = await req.json();
+    const { url, apiKey, validateOnly } = await req.json();
 
     if (!url) {
       return new Response(JSON.stringify({ error: "URL is required" }), {
@@ -215,6 +215,23 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "API key is required. Please add your scrape.do API key in Settings." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // For validation, do a quick single attempt with short timeout
+    if (validateOnly) {
+      try {
+        const params = new URLSearchParams({ token: apiKey, url: url });
+        const res = await fetch(`https://api.scrape.do/?${params.toString()}`, { signal: AbortSignal.timeout(15000) });
+        return new Response(
+          JSON.stringify({ status: res.status }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch {
+        return new Response(
+          JSON.stringify({ status: 0, error: "Validation request failed" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     const params = new URLSearchParams({

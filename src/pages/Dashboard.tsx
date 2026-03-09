@@ -87,12 +87,30 @@ const Dashboard = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      const twentyFourHoursAgo = new Date();
+      twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+
+      const { data: existing } = await supabase
+        .from("search_results")
+        .select("id")
+        .eq("user_id", user.id)
+        .ilike("search_first", scrapeResult.person.firstName.trim())
+        .ilike("search_last", scrapeResult.person.lastName.trim())
+        .ilike("search_city", scrapeResult.person.city.trim())
+        .ilike("search_state", normalizeState(scrapeResult.person.state))
+        .gte("created_at", twentyFourHoursAgo.toISOString())
+        .limit(1)
+        .maybeSingle();
+
+      if (existing) return;
+
       await supabase.from("search_results").insert({
         user_id: user.id,
-        search_first: scrapeResult.person.firstName,
-        search_last: scrapeResult.person.lastName,
-        search_city: scrapeResult.person.city,
-        search_state: scrapeResult.person.state,
+        search_first: scrapeResult.person.firstName.trim(),
+        search_last: scrapeResult.person.lastName.trim(),
+        search_city: scrapeResult.person.city.trim(),
+        search_state: normalizeState(scrapeResult.person.state),
         search_zipcode: scrapeResult.person.zipcode || "",
         search_url: scrapeResult.url,
         total_results: scrapeResult.totalResults,

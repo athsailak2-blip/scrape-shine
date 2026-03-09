@@ -139,25 +139,21 @@ function parseListingPage(html: string): PersonResult[] {
   return results;
 }
 
-function buildScrapeUrl(apiKey: string, url: string, useSuperProxy: boolean): string {
+function buildScrapeUrl(apiKey: string, url: string): string {
   const params = new URLSearchParams({
     token: apiKey,
     url,
     geoCode: "us",
-    render: "false",
+    render: "true",
+    super: "true",
   });
-
-  if (useSuperProxy) {
-    params.set("super", "true");
-  }
 
   return `https://api.scrape.do/?${params.toString()}`;
 }
 
 const ATTEMPTS = [
-  { useSuperProxy: false, timeoutMs: 18000 },
-  { useSuperProxy: true, timeoutMs: 22000 },
-  { useSuperProxy: false, timeoutMs: 18000 },
+  { timeoutMs: 45000 },
+  { timeoutMs: 45000 },
 ] as const;
 
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
@@ -168,10 +164,10 @@ async function scrapePage(apiKey: string, url: string): Promise<{ html: string; 
 
   for (let i = 0; i < ATTEMPTS.length; i++) {
     const attempt = ATTEMPTS[i];
-    const scrapeUrl = buildScrapeUrl(apiKey, url, attempt.useSuperProxy);
+    const scrapeUrl = buildScrapeUrl(apiKey, url);
 
     console.log(
-      `Scrape attempt ${i + 1}/${ATTEMPTS.length} (super=${attempt.useSuperProxy}, timeout=${attempt.timeoutMs}ms)`
+      `Scrape attempt ${i + 1}/${ATTEMPTS.length} (super=true, render=true, timeout=${attempt.timeoutMs}ms)`
     );
 
     try {

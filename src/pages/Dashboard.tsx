@@ -38,6 +38,8 @@ const Dashboard = () => {
     loadApiKey();
     loadHistory();
     checkRole();
+    maybeRunDailyCleanup();
+    if (!hasCompletedOnboarding()) setTutorialOpen(true);
   }, []);
 
   const checkRole = async () => {

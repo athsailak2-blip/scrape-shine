@@ -102,39 +102,6 @@ Deno.serve(async (req) => {
       const targetUrl = `https://www.cyberbackgroundchecks.com/people/${first}-${last}/${state}/${city}`;
 
       try {
-        const params = new URLSearchParams({
-          token: apiKey,
-          url: targetUrl,
-          super: "true",
-          geoCode: "us",
-        });
-
-        const scrapeUrl = `https://api.scrape.do/?${params.toString()}`;
-        const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(90000) });
-
-        if (response.status === 402) {
-          creditsExhausted = true;
-          await supabase.from("bulk_job_items").update({
-            status: "credits_exhausted", error: "Credits exhausted", updated_at: new Date().toISOString(),
-          }).eq("id", item.id);
-          // Mark remaining as not_processed
-          await supabase.from("bulk_job_items").update({
-            status: "not_processed", error: "Credits exhausted before processing", updated_at: new Date().toISOString(),
-          }).eq("job_id", jobId).eq("status", "pending");
-          break;
-        }
-
-        if (response.status !== 200) {
-          throw new Error(`Scrape failed with status ${response.status}`);
-        }
-
-        const html = await response.text();
-
-        // We pass the HTML to be parsed - store raw result
-        // Simple: invoke scrape function or parse inline
-        // For efficiency, we'll store the scrape result and let client handle parsing
-        // Actually, let's store a minimal result - the edge function already has parsing logic
-        // We'll call the scrape function internally
         const scrapeResponse = await fetch(
           `${Deno.env.get("SUPABASE_URL")}/functions/v1/scrape`,
           {
@@ -149,8 +116,11 @@ Deno.serve(async (req) => {
 
         const scrapeData = await scrapeResponse.json();
 
-        if (scrapeData.error) {
-          if (scrapeData.error.includes("402") || scrapeData.error.toLowerCase().includes("credit")) {
+        if (!scrapeResponse.ok || scrapeData.error) {
+          const errMsg = String(scrapeData?.error || `Scrape failed with status ${scrapeResponse.status}`);
+          const status = Number(scrapeData?.status || scrapeResponse.status || 0);
+
+          if (status === 402 || errMsg.toLowerCase().includes("credit")) {
             creditsExhausted = true;
             await supabase.from("bulk_job_items").update({
               status: "credits_exhausted", error: "Credits exhausted", updated_at: new Date().toISOString(),
@@ -160,7 +130,8 @@ Deno.serve(async (req) => {
             }).eq("job_id", jobId).eq("status", "pending");
             break;
           }
-          throw new Error(scrapeData.error);
+
+          throw new Error(errMsg);
         }
 
         const result = {

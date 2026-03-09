@@ -83,6 +83,23 @@ const Dashboard = () => {
     }
   };
 
+  const maybeRunDailyCleanup = async () => {
+    const key = "ownertrace_last_cleanup_run";
+    const lastRun = localStorage.getItem(key);
+    const now = Date.now();
+
+    if (lastRun && now - Number(lastRun) < 24 * 60 * 60 * 1000) {
+      return;
+    }
+
+    try {
+      await supabase.functions.invoke("cleanup-old-results", { body: {} });
+      localStorage.setItem(key, String(now));
+    } catch (error) {
+      console.error("Cleanup trigger failed:", error);
+    }
+  };
+
   const saveResultToDb = async (scrapeResult: ScrapeResult) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();

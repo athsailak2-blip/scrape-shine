@@ -314,6 +314,35 @@ const Admin = () => {
           </Table>
         </div>
       </main>
+
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>User search history: {historyEmail}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-auto space-y-2">
+            {historyLoading ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading history...
+              </div>
+            ) : historyItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">No searches found for this user.</p>
+            ) : (
+              historyItems.map((item) => (
+                <div key={item.id} className="rounded-lg border border-border p-3 bg-card">
+                  <p className="text-sm font-medium">
+                    {item.search_first} {item.search_last} • {item.search_city}, {item.search_state}
+                  </p>
+                  <div className="text-xs text-muted-foreground mt-1 flex gap-3">
+                    <span>{item.total_results} results</span>
+                    <span>{new Date(item.created_at).toLocaleString()}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -145,7 +145,8 @@ async function scrapeWithRetry(scrapeUrl: string, maxRetries = 2): Promise<{ htm
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`Scrape attempt ${attempt}/${maxRetries}`);
-      const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(30000) });
+      // Increased timeout to 45s - scrape.do can be slow with super: true
+      const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(45000) });
       const html = await response.text();
 
       if (response.status === 200) {
@@ -157,16 +158,24 @@ async function scrapeWithRetry(scrapeUrl: string, maxRetries = 2): Promise<{ htm
         return { html, status: response.status };
       }
 
-      lastError = new Error(`Scrape failed with status ${response.status}`);
-      console.warn(`Attempt ${attempt} failed with status ${response.status}`);
+      // If we got a 502/503 gateway error, retry
+      if (response.status === 502 || response.status === 503) {
+        lastError = new Error(`Gateway error ${response.status}`);
+        console.warn(`Attempt ${attempt} got gateway error ${response.status}, will retry`);
+      } else {
+        lastError = new Error(`Scrape failed with status ${response.status}`);
+        console.warn(`Attempt ${attempt} failed with status ${response.status}`);
+      }
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       console.warn(`Attempt ${attempt} error: ${lastError.message}`);
     }
 
-    // Wait before retry
+    // Wait before retry with exponential backoff
     if (attempt < maxRetries) {
-      await new Promise(r => setTimeout(r, 3000));
+      const delay = attempt * 2000; // 2s, 4s
+      console.log(`Waiting ${delay}ms before retry...`);
+      await new Promise(r => setTimeout(r, delay));
     }
   }
 

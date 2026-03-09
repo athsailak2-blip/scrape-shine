@@ -139,49 +139,20 @@ function parseListingPage(html: string): PersonResult[] {
   return results;
 }
 
-async function scrapeWithRetry(scrapeUrls: string[]): Promise<{ html: string; status: number }> {
-  let lastError: Error | null = null;
+async function scrapePage(apiKey: string, url: string): Promise<{ html: string; status: number }> {
+  const params = new URLSearchParams({
+    token: apiKey,
+    url,
+    super: "true",
+    geoCode: "us",
+  });
 
-  for (const [urlIndex, scrapeUrl] of scrapeUrls.entries()) {
-    const isSuperMode = scrapeUrl.includes("super=true");
-    const maxRetries = isSuperMode ? 2 : 1;
-    const timeoutMs = isSuperMode ? 45000 : 20000;
+  const scrapeUrl = `https://api.scrape.do/?${params.toString()}`;
+  console.log("Scraping with super=true, geoCode=us, timeout=120s");
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`Scrape ${isSuperMode ? "super" : "normal"} attempt ${attempt}/${maxRetries}`);
-        const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(timeoutMs) });
-        const html = await response.text();
-
-        if (response.status === 200) {
-          return { html, status: 200 };
-        }
-
-        // Don't retry on credits/auth errors
-        if (response.status === 402 || response.status === 401 || response.status === 403) {
-          return { html, status: response.status };
-        }
-
-        lastError = new Error(`Scrape failed with status ${response.status}`);
-        console.warn(`Attempt ${attempt} failed with status ${response.status}`);
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        console.warn(`Attempt ${attempt} error: ${lastError.message}`);
-      }
-
-      if (attempt < maxRetries) {
-        const delay = attempt * 2000;
-        console.log(`Waiting ${delay}ms before retry...`);
-        await new Promise((r) => setTimeout(r, delay));
-      }
-    }
-
-    if (urlIndex < scrapeUrls.length - 1) {
-      console.log("Normal mode timed out, falling back to super mode...");
-    }
-  }
-
-  throw lastError || new Error("Scrape failed after retries");
+  const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(120000) });
+  const html = await response.text();
+  return { html, status: response.status };
 }
 
 Deno.serve(async (req) => {
@@ -245,28 +216,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    const normalParams = new URLSearchParams({
-      token: apiKey,
-      url,
-      geoCode: "us",
-    });
-
-    const superParams = new URLSearchParams({
-      token: apiKey,
-      url,
-      geoCode: "us",
-      super: "true",
-    });
-
-    const scrapeUrls = [
-      `https://api.scrape.do/?${normalParams.toString()}`,
-      `https://api.scrape.do/?${superParams.toString()}`,
-    ];
-
     console.log("Scraping:", url);
 
-    // Try fast mode first, then super mode fallback
-    const { html, status } = await scrapeWithRetry(scrapeUrls);
+    const { html, status } = await scrapePage(apiKey, url);
 
     if (status !== 200) {
       const errorMsg = status === 402

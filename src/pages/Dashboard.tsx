@@ -162,10 +162,10 @@ const Dashboard = () => {
     twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
     const { data } = await supabase
       .from("search_results").select("*")
-      .eq("search_first", person.firstName.trim())
-      .eq("search_last", person.lastName.trim())
-      .eq("search_city", person.city.trim())
-      .eq("search_state", normalizeState(person.state))
+      .ilike("search_first", person.firstName.trim())
+      .ilike("search_last", person.lastName.trim())
+      .ilike("search_city", person.city.trim())
+      .ilike("search_state", normalizeState(person.state))
       .gte("created_at", twentyFourHoursAgo.toISOString())
       .order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (data) {

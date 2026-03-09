@@ -21,10 +21,25 @@ type UserProfile = {
   role: string;
 };
 
+type UserHistoryItem = {
+  id: string;
+  search_first: string;
+  search_last: string;
+  search_city: string;
+  search_state: string;
+  total_results: number;
+  created_at: string;
+};
+
 const Admin = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyEmail, setHistoryEmail] = useState("");
+  const [historyItems, setHistoryItems] = useState<UserHistoryItem[]>([]);
   const [stats, setStats] = useState({ totalUsers: 0, totalSearches: 0, searchesToday: 0, activeUsers7d: 0 });
   const navigate = useNavigate();
   const { toast } = useToast();

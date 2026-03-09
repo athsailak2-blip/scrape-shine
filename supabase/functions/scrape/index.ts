@@ -139,43 +139,45 @@ function parseListingPage(html: string): PersonResult[] {
   return results;
 }
 
-async function scrapeWithRetry(scrapeUrl: string, maxRetries = 2): Promise<{ html: string; status: number }> {
+async function scrapeWithRetry(scrapeUrls: string[]): Promise<{ html: string; status: number }> {
   let lastError: Error | null = null;
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`Scrape attempt ${attempt}/${maxRetries}`);
-      // Increased timeout to 45s - scrape.do can be slow with super: true
-      const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(45000) });
-      const html = await response.text();
+  for (const [urlIndex, scrapeUrl] of scrapeUrls.entries()) {
+    const isSuperMode = scrapeUrl.includes("super=true");
+    const maxRetries = isSuperMode ? 2 : 1;
+    const timeoutMs = isSuperMode ? 45000 : 20000;
 
-      if (response.status === 200) {
-        return { html, status: 200 };
-      }
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`Scrape ${isSuperMode ? "super" : "normal"} attempt ${attempt}/${maxRetries}`);
+        const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(timeoutMs) });
+        const html = await response.text();
 
-      // Don't retry on 402 (credits exhausted) or 401/403 (auth issues)
-      if (response.status === 402 || response.status === 401 || response.status === 403) {
-        return { html, status: response.status };
-      }
+        if (response.status === 200) {
+          return { html, status: 200 };
+        }
 
-      // If we got a 502/503 gateway error, retry
-      if (response.status === 502 || response.status === 503) {
-        lastError = new Error(`Gateway error ${response.status}`);
-        console.warn(`Attempt ${attempt} got gateway error ${response.status}, will retry`);
-      } else {
+        // Don't retry on credits/auth errors
+        if (response.status === 402 || response.status === 401 || response.status === 403) {
+          return { html, status: response.status };
+        }
+
         lastError = new Error(`Scrape failed with status ${response.status}`);
         console.warn(`Attempt ${attempt} failed with status ${response.status}`);
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        console.warn(`Attempt ${attempt} error: ${lastError.message}`);
       }
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err));
-      console.warn(`Attempt ${attempt} error: ${lastError.message}`);
+
+      if (attempt < maxRetries) {
+        const delay = attempt * 2000;
+        console.log(`Waiting ${delay}ms before retry...`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
     }
 
-    // Wait before retry with exponential backoff
-    if (attempt < maxRetries) {
-      const delay = attempt * 2000; // 2s, 4s
-      console.log(`Waiting ${delay}ms before retry...`);
-      await new Promise(r => setTimeout(r, delay));
+    if (urlIndex < scrapeUrls.length - 1) {
+      console.log("Normal mode timed out, falling back to super mode...");
     }
   }
 
@@ -243,18 +245,28 @@ Deno.serve(async (req) => {
       }
     }
 
-    const params = new URLSearchParams({
+    const normalParams = new URLSearchParams({
       token: apiKey,
-      url: url,
-      super: "true",
+      url,
       geoCode: "us",
     });
 
-    const scrapeUrl = `https://api.scrape.do/?${params.toString()}`;
+    const superParams = new URLSearchParams({
+      token: apiKey,
+      url,
+      geoCode: "us",
+      super: "true",
+    });
+
+    const scrapeUrls = [
+      `https://api.scrape.do/?${normalParams.toString()}`,
+      `https://api.scrape.do/?${superParams.toString()}`,
+    ];
+
     console.log("Scraping:", url);
 
-    // Use retry logic (2 attempts to stay within Edge Function timeout)
-    const { html, status } = await scrapeWithRetry(scrapeUrl, 2);
+    // Try fast mode first, then super mode fallback
+    const { html, status } = await scrapeWithRetry(scrapeUrls);
 
     if (status !== 200) {
       const errorMsg = status === 402

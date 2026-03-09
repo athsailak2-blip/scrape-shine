@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Key, User, FileSpreadsheet, ShieldCheck, Briefcase } from "lucide-react";
+import { Search, Key, User, FileSpreadsheet, ShieldCheck, Briefcase, GraduationCap } from "lucide-react";
 
 import type { PersonInput, PersonResult, ScrapeResult, BulkItem } from "@/components/dashboard/types";
 import { buildUrl, normalizeState, filterByZip } from "@/components/dashboard/utils";
@@ -14,6 +14,7 @@ import SearchForm from "@/components/dashboard/SearchForm";
 import BulkUpload from "@/components/dashboard/BulkUpload";
 import SearchHistory from "@/components/dashboard/SearchHistory";
 import JobsDashboard from "@/components/dashboard/JobsDashboard";
+import OnboardingTutorial, { hasCompletedOnboarding } from "@/components/dashboard/OnboardingTutorial";
 
 const Dashboard = () => {
   const navigate = useNavigate();

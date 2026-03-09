@@ -144,20 +144,16 @@ function buildScrapeUrl(apiKey: string, url: string, useSuperProxy: boolean): st
     token: apiKey,
     url,
     geoCode: "us",
-    render: "false",
+    render: "true",
+    super: "true",
   });
-
-  if (useSuperProxy) {
-    params.set("super", "true");
-  }
 
   return `https://api.scrape.do/?${params.toString()}`;
 }
 
 const ATTEMPTS = [
-  { useSuperProxy: false, timeoutMs: 18000 },
-  { useSuperProxy: true, timeoutMs: 22000 },
-  { useSuperProxy: false, timeoutMs: 18000 },
+  { timeoutMs: 45000 },
+  { timeoutMs: 45000 },
 ] as const;
 
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);

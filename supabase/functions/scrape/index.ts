@@ -164,10 +164,10 @@ async function scrapePage(apiKey: string, url: string): Promise<{ html: string; 
 
   for (let i = 0; i < ATTEMPTS.length; i++) {
     const attempt = ATTEMPTS[i];
-    const scrapeUrl = buildScrapeUrl(apiKey, url, attempt.useSuperProxy);
+    const scrapeUrl = buildScrapeUrl(apiKey, url);
 
     console.log(
-      `Scrape attempt ${i + 1}/${ATTEMPTS.length} (super=${attempt.useSuperProxy}, timeout=${attempt.timeoutMs}ms)`
+      `Scrape attempt ${i + 1}/${ATTEMPTS.length} (super=true, render=true, timeout=${attempt.timeoutMs}ms)`
     );
 
     try {

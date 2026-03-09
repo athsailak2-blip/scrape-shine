@@ -143,6 +143,56 @@ const Admin = () => {
     setToggling(null);
   };
 
+  const exportUsersCsv = () => {
+    const esc = (value: string | number | boolean) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const rows = [
+      ["email", "role", "search_count", "status", "joined_at"].map(esc).join(","),
+      ...filteredUsers.map((u) => [
+        esc(u.email || ""),
+        esc(u.role),
+        esc(u.search_count),
+        esc(u.disabled ? "disabled" : "active"),
+        esc(new Date(u.created_at).toISOString()),
+      ].join(",")),
+    ];
+
+    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ownertrace-users-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const loadUserHistory = async (userId: string, email: string) => {
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setHistoryEmail(email || "Unknown user");
+
+    const { data, error } = await supabase
+      .from("search_results")
+      .select("id, search_first, search_last, search_city, search_state, total_results, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error) {
+      toast({ title: "Failed to load user history", variant: "destructive" });
+      setHistoryItems([]);
+    } else {
+      setHistoryItems((data || []) as UserHistoryItem[]);
+    }
+
+    setHistoryLoading(false);
+  };
+
+  const filteredUsers = users.filter((u) => {
+    if (!query.trim()) return true;
+    const q = query.trim().toLowerCase();
+    return (u.email || "").toLowerCase().includes(q) || u.role.toLowerCase().includes(q);
+  });
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">

@@ -152,6 +152,16 @@ async function scrapePage(apiKey: string, url: string): Promise<{ html: string; 
 
   const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(120000) });
   const html = await response.text();
+
+  // Retry once on 502/503 (transient proxy failures)
+  if (response.status === 502 || response.status === 503) {
+    console.log(`Got ${response.status}, retrying in 3s...`);
+    await new Promise(r => setTimeout(r, 3000));
+    const retry = await fetch(scrapeUrl, { signal: AbortSignal.timeout(120000) });
+    const retryHtml = await retry.text();
+    return { html: retryHtml, status: retry.status };
+  }
+
   return { html, status: response.status };
 }
 

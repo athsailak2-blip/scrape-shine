@@ -139,13 +139,13 @@ function parseListingPage(html: string): PersonResult[] {
   return results;
 }
 
-async function scrapeWithRetry(scrapeUrl: string, maxRetries = 3): Promise<{ html: string; status: number }> {
+async function scrapeWithRetry(scrapeUrl: string, maxRetries = 2): Promise<{ html: string; status: number }> {
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`Scrape attempt ${attempt}/${maxRetries}`);
-      const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(90000) });
+      const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(30000) });
       const html = await response.text();
 
       if (response.status === 200) {
@@ -164,9 +164,9 @@ async function scrapeWithRetry(scrapeUrl: string, maxRetries = 3): Promise<{ htm
       console.warn(`Attempt ${attempt} error: ${lastError.message}`);
     }
 
-    // Wait before retry (exponential backoff)
+    // Wait before retry
     if (attempt < maxRetries) {
-      await new Promise(r => setTimeout(r, 2000 * attempt));
+      await new Promise(r => setTimeout(r, 3000));
     }
   }
 
@@ -201,7 +201,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { url, apiKey } = await req.json();
+    const { url, apiKey, validateOnly } = await req.json();
 
     if (!url) {
       return new Response(JSON.stringify({ error: "URL is required" }), {
@@ -215,6 +215,23 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "API key is required. Please add your scrape.do API key in Settings." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // For validation, do a quick single attempt with short timeout
+    if (validateOnly) {
+      try {
+        const params = new URLSearchParams({ token: apiKey, url: url });
+        const res = await fetch(`https://api.scrape.do/?${params.toString()}`, { signal: AbortSignal.timeout(15000) });
+        return new Response(
+          JSON.stringify({ status: res.status }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch {
+        return new Response(
+          JSON.stringify({ status: 0, error: "Validation request failed" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     const params = new URLSearchParams({

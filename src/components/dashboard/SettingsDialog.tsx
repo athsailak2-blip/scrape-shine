@@ -29,10 +29,11 @@ const SettingsDialog = ({ open, onOpenChange, apiKey, onApiKeySaved, disabled, d
     setValidating(true);
     setValidationResult(null);
     try {
-      // Test the key with a simple scrape.do API call
-      const testUrl = `https://api.scrape.do/?token=${encodeURIComponent(key)}&url=${encodeURIComponent("https://httpbin.org/get")}`;
-      const res = await fetch(testUrl, { signal: AbortSignal.timeout(15000) });
-      const isValid = res.status === 200;
+      // Validate through edge function to avoid CORS issues
+      const { data, error } = await supabase.functions.invoke("scrape", {
+        body: { url: "https://httpbin.org/get", apiKey: key, validateOnly: true },
+      });
+      const isValid = !error && data?.status === 200;
       setValidationResult(isValid ? "valid" : "invalid");
       return isValid;
     } catch {

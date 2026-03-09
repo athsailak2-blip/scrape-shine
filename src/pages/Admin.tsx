@@ -237,12 +237,23 @@ const Admin = () => {
         </div>
 
         {/* Users Table */}
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="p-4 border-b border-border">
-            <h2 className="font-semibold font-heading flex items-center gap-2">
-              <Users className="h-4 w-4 text-primary" /> Users ({users.length})
-            </h2>
-          </div>
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="p-4 border-b border-border flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <h2 className="font-semibold font-heading flex items-center gap-2">
+                <Users className="h-4 w-4 text-primary" /> Users ({filteredUsers.length})
+              </h2>
+              <div className="flex gap-2 w-full md:w-auto">
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Filter by email or role"
+                  className="md:w-64"
+                />
+                <Button variant="outline" size="sm" onClick={exportUsersCsv} className="gap-1.5">
+                  <Download className="h-4 w-4" /> Export CSV
+                </Button>
+              </div>
+            </div>
           <Table>
             <TableHeader>
               <TableRow>

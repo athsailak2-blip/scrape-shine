@@ -499,7 +499,7 @@ const Dashboard = () => {
           <h1 className="text-3xl font-bold font-heading mb-2">People Search</h1>
           <p className="text-muted-foreground mb-6">Find emails, phones, addresses, relatives and more from public records.</p>
 
-          <Tabs defaultValue="single" className="w-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="mb-4">
               <TabsTrigger value="single" className="gap-2"><User className="h-4 w-4" />Single</TabsTrigger>
               <TabsTrigger value="bulk" className="gap-2"><FileSpreadsheet className="h-4 w-4" />Bulk Upload</TabsTrigger>

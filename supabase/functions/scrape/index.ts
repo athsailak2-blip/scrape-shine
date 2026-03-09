@@ -139,30 +139,69 @@ function parseListingPage(html: string): PersonResult[] {
   return results;
 }
 
-async function scrapePage(apiKey: string, url: string): Promise<{ html: string; status: number }> {
+function buildScrapeUrl(apiKey: string, url: string, useSuperProxy: boolean): string {
   const params = new URLSearchParams({
     token: apiKey,
     url,
-    super: "true",
     geoCode: "us",
   });
 
-  const scrapeUrl = `https://api.scrape.do/?${params.toString()}`;
-  console.log("Scraping with super=true, geoCode=us, timeout=120s");
-
-  const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(120000) });
-  const html = await response.text();
-
-  // Retry once on 502/503 (transient proxy failures)
-  if (response.status === 502 || response.status === 503) {
-    console.log(`Got ${response.status}, retrying in 3s...`);
-    await new Promise(r => setTimeout(r, 3000));
-    const retry = await fetch(scrapeUrl, { signal: AbortSignal.timeout(120000) });
-    const retryHtml = await retry.text();
-    return { html: retryHtml, status: retry.status };
+  if (useSuperProxy) {
+    params.set("super", "true");
   }
 
-  return { html, status: response.status };
+  return `https://api.scrape.do/?${params.toString()}`;
+}
+
+const ATTEMPTS = [
+  { useSuperProxy: true, timeoutMs: 55000 },
+  { useSuperProxy: false, timeoutMs: 35000 },
+] as const;
+
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+async function scrapePage(apiKey: string, url: string): Promise<{ html: string; status: number }> {
+  let lastStatus = 0;
+  let lastHtml = "";
+
+  for (let i = 0; i < ATTEMPTS.length; i++) {
+    const attempt = ATTEMPTS[i];
+    const scrapeUrl = buildScrapeUrl(apiKey, url, attempt.useSuperProxy);
+
+    console.log(
+      `Scrape attempt ${i + 1}/${ATTEMPTS.length} (super=${attempt.useSuperProxy}, timeout=${attempt.timeoutMs}ms)`
+    );
+
+    try {
+      const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(attempt.timeoutMs) });
+      const html = await response.text();
+      lastStatus = response.status;
+      lastHtml = html;
+
+      if (response.status === 200) {
+        return { html, status: 200 };
+      }
+
+      const hasMoreAttempts = i < ATTEMPTS.length - 1;
+      if (!hasMoreAttempts || !RETRYABLE_STATUSES.has(response.status)) {
+        return { html, status: response.status };
+      }
+
+      console.log(`Got ${response.status}, retrying in 1500ms with fallback strategy...`);
+      await new Promise((r) => setTimeout(r, 1500));
+    } catch (error) {
+      const hasMoreAttempts = i < ATTEMPTS.length - 1;
+      console.log(`Attempt ${i + 1} failed: ${error instanceof Error ? error.message : String(error)}`);
+
+      if (!hasMoreAttempts) {
+        return { html: lastHtml, status: lastStatus || 504 };
+      }
+
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+
+  return { html: lastHtml, status: lastStatus || 504 };
 }
 
 Deno.serve(async (req) => {

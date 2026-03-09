@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  Search, ArrowLeft, Users, BarChart3, Ban, CheckCircle2, Loader2,
+  Search, ArrowLeft, Users, BarChart3, Ban, CheckCircle2, Loader2, Download, History,
 } from "lucide-react";
 
 type UserProfile = {

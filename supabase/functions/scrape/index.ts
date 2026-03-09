@@ -139,13 +139,13 @@ function parseListingPage(html: string): PersonResult[] {
   return results;
 }
 
-async function scrapeWithRetry(scrapeUrl: string, maxRetries = 3): Promise<{ html: string; status: number }> {
+async function scrapeWithRetry(scrapeUrl: string, maxRetries = 2): Promise<{ html: string; status: number }> {
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`Scrape attempt ${attempt}/${maxRetries}`);
-      const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(90000) });
+      const response = await fetch(scrapeUrl, { signal: AbortSignal.timeout(30000) });
       const html = await response.text();
 
       if (response.status === 200) {
@@ -164,9 +164,9 @@ async function scrapeWithRetry(scrapeUrl: string, maxRetries = 3): Promise<{ htm
       console.warn(`Attempt ${attempt} error: ${lastError.message}`);
     }
 
-    // Wait before retry (exponential backoff)
+    // Wait before retry
     if (attempt < maxRetries) {
-      await new Promise(r => setTimeout(r, 2000 * attempt));
+      await new Promise(r => setTimeout(r, 3000));
     }
   }
 

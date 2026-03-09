@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Key, User, FileSpreadsheet, ShieldCheck, Briefcase } from "lucide-react";
+import { Search, Key, User, FileSpreadsheet, ShieldCheck, Briefcase, GraduationCap } from "lucide-react";
 
 import type { PersonInput, PersonResult, ScrapeResult, BulkItem } from "@/components/dashboard/types";
 import { buildUrl, normalizeState, filterByZip } from "@/components/dashboard/utils";
@@ -14,6 +14,7 @@ import SearchForm from "@/components/dashboard/SearchForm";
 import BulkUpload from "@/components/dashboard/BulkUpload";
 import SearchHistory from "@/components/dashboard/SearchHistory";
 import JobsDashboard from "@/components/dashboard/JobsDashboard";
+import OnboardingTutorial, { hasCompletedOnboarding } from "@/components/dashboard/OnboardingTutorial";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -26,6 +27,8 @@ const Dashboard = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isDisabled, setIsDisabled] = useState(false);
+  const [activeTab, setActiveTab] = useState("single");
+  const [tutorialOpen, setTutorialOpen] = useState(false);
 
   const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
   const [bulkRunning, setBulkRunning] = useState(false);
@@ -35,6 +38,8 @@ const Dashboard = () => {
     loadApiKey();
     loadHistory();
     checkRole();
+    maybeRunDailyCleanup();
+    if (!hasCompletedOnboarding()) setTutorialOpen(true);
   }, []);
 
   const checkRole = async () => {
@@ -78,16 +83,51 @@ const Dashboard = () => {
     }
   };
 
+  const maybeRunDailyCleanup = async () => {
+    const key = "ownertrace_last_cleanup_run";
+    const lastRun = localStorage.getItem(key);
+    const now = Date.now();
+
+    if (lastRun && now - Number(lastRun) < 24 * 60 * 60 * 1000) {
+      return;
+    }
+
+    try {
+      await supabase.functions.invoke("cleanup-old-results", { body: {} });
+      localStorage.setItem(key, String(now));
+    } catch (error) {
+      console.error("Cleanup trigger failed:", error);
+    }
+  };
+
   const saveResultToDb = async (scrapeResult: ScrapeResult) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      const twentyFourHoursAgo = new Date();
+      twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+
+      const { data: existing } = await supabase
+        .from("search_results")
+        .select("id")
+        .eq("user_id", user.id)
+        .ilike("search_first", scrapeResult.person.firstName.trim())
+        .ilike("search_last", scrapeResult.person.lastName.trim())
+        .ilike("search_city", scrapeResult.person.city.trim())
+        .ilike("search_state", normalizeState(scrapeResult.person.state))
+        .gte("created_at", twentyFourHoursAgo.toISOString())
+        .limit(1)
+        .maybeSingle();
+
+      if (existing) return;
+
       await supabase.from("search_results").insert({
         user_id: user.id,
-        search_first: scrapeResult.person.firstName,
-        search_last: scrapeResult.person.lastName,
-        search_city: scrapeResult.person.city,
-        search_state: scrapeResult.person.state,
+        search_first: scrapeResult.person.firstName.trim(),
+        search_last: scrapeResult.person.lastName.trim(),
+        search_city: scrapeResult.person.city.trim(),
+        search_state: normalizeState(scrapeResult.person.state),
         search_zipcode: scrapeResult.person.zipcode || "",
         search_url: scrapeResult.url,
         total_results: scrapeResult.totalResults,
@@ -122,10 +162,10 @@ const Dashboard = () => {
     twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
     const { data } = await supabase
       .from("search_results").select("*")
-      .eq("search_first", person.firstName.trim())
-      .eq("search_last", person.lastName.trim())
-      .eq("search_city", person.city.trim())
-      .eq("search_state", normalizeState(person.state))
+      .ilike("search_first", person.firstName.trim())
+      .ilike("search_last", person.lastName.trim())
+      .ilike("search_city", person.city.trim())
+      .ilike("search_state", normalizeState(person.state))
       .gte("created_at", twentyFourHoursAgo.toISOString())
       .order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (data) {
@@ -411,6 +451,10 @@ const Dashboard = () => {
             <span className="font-bold font-heading">OwnerTrace</span>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setTutorialOpen(true)} className="gap-1.5">
+              <GraduationCap className="h-4 w-4" />
+              <span className="hidden sm:inline">Tutorial</span>
+            </Button>
             <SettingsDialog
               open={settingsOpen}
               onOpenChange={setSettingsOpen}
@@ -428,6 +472,14 @@ const Dashboard = () => {
           </div>
         </div>
       </header>
+
+      <OnboardingTutorial
+        open={tutorialOpen}
+        onOpenChange={setTutorialOpen}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onSelectSingleTab={() => setActiveTab("single")}
+        onSelectBulkTab={() => setActiveTab("bulk")}
+      />
 
       <main className="container px-4 py-8 max-w-5xl">
         {!apiKey && (
@@ -455,7 +507,7 @@ const Dashboard = () => {
           <h1 className="text-3xl font-bold font-heading mb-2">People Search</h1>
           <p className="text-muted-foreground mb-6">Find emails, phones, addresses, relatives and more from public records.</p>
 
-          <Tabs defaultValue="single" className="w-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="mb-4">
               <TabsTrigger value="single" className="gap-2"><User className="h-4 w-4" />Single</TabsTrigger>
               <TabsTrigger value="bulk" className="gap-2"><FileSpreadsheet className="h-4 w-4" />Bulk Upload</TabsTrigger>

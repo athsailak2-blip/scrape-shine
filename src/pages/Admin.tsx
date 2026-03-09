@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  Search, ArrowLeft, Users, BarChart3, Ban, CheckCircle2, Loader2,
+  Search, ArrowLeft, Users, BarChart3, Ban, CheckCircle2, Loader2, Download, History,
 } from "lucide-react";
 
 type UserProfile = {
@@ -19,10 +21,25 @@ type UserProfile = {
   role: string;
 };
 
+type UserHistoryItem = {
+  id: string;
+  search_first: string;
+  search_last: string;
+  search_city: string;
+  search_state: string;
+  total_results: number;
+  created_at: string;
+};
+
 const Admin = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyEmail, setHistoryEmail] = useState("");
+  const [historyItems, setHistoryItems] = useState<UserHistoryItem[]>([]);
   const [stats, setStats] = useState({ totalUsers: 0, totalSearches: 0, searchesToday: 0, activeUsers7d: 0 });
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -126,6 +143,56 @@ const Admin = () => {
     setToggling(null);
   };
 
+  const exportUsersCsv = () => {
+    const esc = (value: string | number | boolean) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const rows = [
+      ["email", "role", "search_count", "status", "joined_at"].map(esc).join(","),
+      ...filteredUsers.map((u) => [
+        esc(u.email || ""),
+        esc(u.role),
+        esc(u.search_count),
+        esc(u.disabled ? "disabled" : "active"),
+        esc(new Date(u.created_at).toISOString()),
+      ].join(",")),
+    ];
+
+    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ownertrace-users-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const loadUserHistory = async (userId: string, email: string) => {
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setHistoryEmail(email || "Unknown user");
+
+    const { data, error } = await supabase
+      .from("search_results")
+      .select("id, search_first, search_last, search_city, search_state, total_results, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error) {
+      toast({ title: "Failed to load user history", variant: "destructive" });
+      setHistoryItems([]);
+    } else {
+      setHistoryItems((data || []) as UserHistoryItem[]);
+    }
+
+    setHistoryLoading(false);
+  };
+
+  const filteredUsers = users.filter((u) => {
+    if (!query.trim()) return true;
+    const q = query.trim().toLowerCase();
+    return (u.email || "").toLowerCase().includes(q) || u.role.toLowerCase().includes(q);
+  });
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -170,12 +237,23 @@ const Admin = () => {
         </div>
 
         {/* Users Table */}
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="p-4 border-b border-border">
-            <h2 className="font-semibold font-heading flex items-center gap-2">
-              <Users className="h-4 w-4 text-primary" /> Users ({users.length})
-            </h2>
-          </div>
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="p-4 border-b border-border flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <h2 className="font-semibold font-heading flex items-center gap-2">
+                <Users className="h-4 w-4 text-primary" /> Users ({filteredUsers.length})
+              </h2>
+              <div className="flex gap-2 w-full md:w-auto">
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Filter by email or role"
+                  className="md:w-64"
+                />
+                <Button variant="outline" size="sm" onClick={exportUsersCsv} className="gap-1.5">
+                  <Download className="h-4 w-4" /> Export CSV
+                </Button>
+              </div>
+            </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -184,11 +262,11 @@ const Admin = () => {
                 <TableHead>Searches</TableHead>
                 <TableHead>Joined</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Action</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((user) => (
+              {filteredUsers.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell className="font-mono text-sm">{user.email}</TableCell>
                   <TableCell>
@@ -208,17 +286,27 @@ const Admin = () => {
                     )}
                   </TableCell>
                   <TableCell>
-                    {user.role !== "admin" && (
+                    <div className="flex gap-2">
                       <Button
-                        variant={user.disabled ? "outline" : "destructive"}
+                        variant="outline"
                         size="sm"
-                        disabled={toggling === user.id}
-                        onClick={() => toggleDisabled(user.id, user.disabled)}
+                        onClick={() => loadUserHistory(user.id, user.email)}
                         className="text-xs h-7"
                       >
-                        {toggling === user.id ? <Loader2 className="h-3 w-3 animate-spin" /> : user.disabled ? "Enable" : "Disable"}
+                        <History className="h-3 w-3 mr-1" /> History
                       </Button>
-                    )}
+                      {user.role !== "admin" && (
+                        <Button
+                          variant={user.disabled ? "outline" : "destructive"}
+                          size="sm"
+                          disabled={toggling === user.id}
+                          onClick={() => toggleDisabled(user.id, user.disabled)}
+                          className="text-xs h-7"
+                        >
+                          {toggling === user.id ? <Loader2 className="h-3 w-3 animate-spin" /> : user.disabled ? "Enable" : "Disable"}
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -226,6 +314,35 @@ const Admin = () => {
           </Table>
         </div>
       </main>
+
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>User search history: {historyEmail}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-auto space-y-2">
+            {historyLoading ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading history...
+              </div>
+            ) : historyItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">No searches found for this user.</p>
+            ) : (
+              historyItems.map((item) => (
+                <div key={item.id} className="rounded-lg border border-border p-3 bg-card">
+                  <p className="text-sm font-medium">
+                    {item.search_first} {item.search_last} • {item.search_city}, {item.search_state}
+                  </p>
+                  <div className="text-xs text-muted-foreground mt-1 flex gap-3">
+                    <span>{item.total_results} results</span>
+                    <span>{new Date(item.created_at).toLocaleString()}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

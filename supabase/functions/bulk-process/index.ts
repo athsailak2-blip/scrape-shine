@@ -169,20 +169,35 @@ Deno.serve(async (req) => {
           people: scrapeData.people || [],
         };
 
-        // Save to search_results if has results
+        // Save to search_results only if no duplicate in past 24h
         if (result.people.length > 0) {
-          await supabase.from("search_results").insert({
-            user_id: user.id,
-            search_first: item.first_name,
-            search_last: item.last_name,
-            search_city: item.city,
-            search_state: item.state,
-            search_zipcode: item.zipcode || "",
-            search_url: targetUrl,
-            total_results: result.totalResults,
-            people: result.people,
-            source: "bulk",
-          });
+          const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+          const { data: existing } = await supabase
+            .from("search_results")
+            .select("id")
+            .eq("user_id", user.id)
+            .ilike("search_first", item.first_name.trim())
+            .ilike("search_last", item.last_name.trim())
+            .ilike("search_city", item.city.trim())
+            .ilike("search_state", item.state.trim())
+            .gte("created_at", twentyFourHoursAgo)
+            .limit(1)
+            .maybeSingle();
+
+          if (!existing) {
+            await supabase.from("search_results").insert({
+              user_id: user.id,
+              search_first: item.first_name,
+              search_last: item.last_name,
+              search_city: item.city,
+              search_state: item.state,
+              search_zipcode: item.zipcode || "",
+              search_url: targetUrl,
+              total_results: result.totalResults,
+              people: result.people,
+              source: "bulk",
+            });
+          }
         }
 
         await supabase.from("bulk_job_items").update({

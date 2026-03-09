@@ -139,7 +139,7 @@ function parseListingPage(html: string): PersonResult[] {
   return results;
 }
 
-function buildScrapeUrl(apiKey: string, url: string, useSuperProxy: boolean): string {
+function buildScrapeUrl(apiKey: string, url: string): string {
   const params = new URLSearchParams({
     token: apiKey,
     url,

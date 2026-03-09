@@ -144,6 +144,7 @@ function buildScrapeUrl(apiKey: string, url: string, useSuperProxy: boolean): st
     token: apiKey,
     url,
     geoCode: "us",
+    render: "false",
   });
 
   if (useSuperProxy) {
@@ -154,8 +155,9 @@ function buildScrapeUrl(apiKey: string, url: string, useSuperProxy: boolean): st
 }
 
 const ATTEMPTS = [
-  { useSuperProxy: true, timeoutMs: 55000 },
-  { useSuperProxy: false, timeoutMs: 35000 },
+  { useSuperProxy: false, timeoutMs: 18000 },
+  { useSuperProxy: true, timeoutMs: 22000 },
+  { useSuperProxy: false, timeoutMs: 18000 },
 ] as const;
 
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
@@ -187,17 +189,17 @@ async function scrapePage(apiKey: string, url: string): Promise<{ html: string; 
         return { html, status: response.status };
       }
 
-      console.log(`Got ${response.status}, retrying in 1500ms with fallback strategy...`);
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 1200));
     } catch (error) {
       const hasMoreAttempts = i < ATTEMPTS.length - 1;
-      console.log(`Attempt ${i + 1} failed: ${error instanceof Error ? error.message : String(error)}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      console.log(`Attempt ${i + 1} failed: ${msg}`);
 
       if (!hasMoreAttempts) {
         return { html: lastHtml, status: lastStatus || 504 };
       }
 
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 1200));
     }
   }
 

@@ -102,23 +102,52 @@ Deno.serve(async (req) => {
       const targetUrl = `https://www.cyberbackgroundchecks.com/people/${first}-${last}/${state}/${city}`;
 
       try {
-        const scrapeResponse = await fetch(
-          `${Deno.env.get("SUPABASE_URL")}/functions/v1/scrape`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: authHeader,
-            },
-            body: JSON.stringify({ url: targetUrl, apiKey }),
+        const transientStatuses = new Set([429, 500, 502, 503, 504]);
+        let scrapeData: any = null;
+        let scrapeStatus = 0;
+        let scrapeError = "";
+
+        for (let scrapeAttempt = 1; scrapeAttempt <= 2; scrapeAttempt++) {
+          const scrapeResponse = await fetch(
+            `${Deno.env.get("SUPABASE_URL")}/functions/v1/scrape`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: authHeader,
+              },
+              body: JSON.stringify({ url: targetUrl, apiKey }),
+            }
+          );
+
+          scrapeStatus = scrapeResponse.status;
+          const responseText = await scrapeResponse.text();
+
+          try {
+            scrapeData = responseText ? JSON.parse(responseText) : {};
+          } catch {
+            scrapeData = { error: `Scrape returned invalid JSON (status ${scrapeStatus})` };
           }
-        );
 
-        const scrapeData = await scrapeResponse.json();
+          if (scrapeResponse.ok && !scrapeData?.error) {
+            scrapeError = "";
+            break;
+          }
 
-        if (!scrapeResponse.ok || scrapeData.error) {
-          const errMsg = String(scrapeData?.error || `Scrape failed with status ${scrapeResponse.status}`);
-          const status = Number(scrapeData?.status || scrapeResponse.status || 0);
+          scrapeError = String(scrapeData?.error || `Scrape failed with status ${scrapeStatus}`);
+          const isTransient = transientStatuses.has(scrapeStatus) || scrapeError.toLowerCase().includes("timed out");
+
+          if (isTransient && scrapeAttempt < 2) {
+            await new Promise((r) => setTimeout(r, 2500));
+            continue;
+          }
+
+          break;
+        }
+
+        if (scrapeError) {
+          const errMsg = scrapeError;
+          const status = scrapeStatus;
 
           if (status === 402 || errMsg.toLowerCase().includes("credit")) {
             creditsExhausted = true;

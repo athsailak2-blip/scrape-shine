@@ -216,28 +216,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    const normalParams = new URLSearchParams({
-      token: apiKey,
-      url,
-      geoCode: "us",
-    });
-
-    const superParams = new URLSearchParams({
-      token: apiKey,
-      url,
-      geoCode: "us",
-      super: "true",
-    });
-
-    const scrapeUrls = [
-      `https://api.scrape.do/?${normalParams.toString()}`,
-      `https://api.scrape.do/?${superParams.toString()}`,
-    ];
-
     console.log("Scraping:", url);
 
-    // Try fast mode first, then super mode fallback
-    const { html, status } = await scrapeWithRetry(scrapeUrls);
+    const { html, status } = await scrapePage(apiKey, url);
 
     if (status !== 200) {
       const errorMsg = status === 402

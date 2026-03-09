@@ -451,6 +451,10 @@ const Dashboard = () => {
             <span className="font-bold font-heading">OwnerTrace</span>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setTutorialOpen(true)} className="gap-1.5">
+              <GraduationCap className="h-4 w-4" />
+              <span className="hidden sm:inline">Tutorial</span>
+            </Button>
             <SettingsDialog
               open={settingsOpen}
               onOpenChange={setSettingsOpen}

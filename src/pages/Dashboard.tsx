@@ -27,6 +27,8 @@ const Dashboard = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isDisabled, setIsDisabled] = useState(false);
+  const [activeTab, setActiveTab] = useState("single");
+  const [tutorialOpen, setTutorialOpen] = useState(false);
 
   const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
   const [bulkRunning, setBulkRunning] = useState(false);

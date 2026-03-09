@@ -253,8 +253,8 @@ Deno.serve(async (req) => {
     const scrapeUrl = `https://api.scrape.do/?${params.toString()}`;
     console.log("Scraping:", url);
 
-    // Use retry logic (3 attempts with exponential backoff)
-    const { html, status } = await scrapeWithRetry(scrapeUrl, 3);
+    // Use retry logic (2 attempts to stay within Edge Function timeout)
+    const { html, status } = await scrapeWithRetry(scrapeUrl, 2);
 
     if (status !== 200) {
       const errorMsg = status === 402
